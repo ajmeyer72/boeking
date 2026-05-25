@@ -1,3 +1,11 @@
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Boeking — AI-Powered WhatsApp Reservations for Restaurants',
+  description:
+    'Boeking gives your restaurant a 24/7 AI booking assistant on WhatsApp. Customers reserve tables instantly, reminders go out automatically, and your calendar stays perfectly in sync.',
+}
+
 export default function BoekingLandingPage() {
   return (
     <div className="min-h-screen bg-[#0B0F14] text-white font-sans">
@@ -130,15 +138,12 @@ export default function BoekingLandingPage() {
       <section className="border-y border-white/5 bg-white/[0.02]">
         <div className="max-w-7xl mx-auto px-6 py-10 text-center">
           <p className="text-gray-500 mb-8">
-            Trusted by modern restaurants across South Africa
+            Be among the first restaurants to transform your bookings with AI
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 text-gray-400 text-2xl font-semibold opacity-70">
-            <div>MOMO</div>
-            <div>TASHAS</div>
-            <div>KAPNOS</div>
-            <div>MYTHOS</div>
-            <div>GRILLHOUSE</div>
+          <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-6 py-3 text-green-400 text-sm font-medium">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            Now onboarding restaurants — 14-day free trial included
           </div>
         </div>
       </section>
@@ -198,25 +203,43 @@ export default function BoekingLandingPage() {
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
-            '24/7 AI Assistant',
-            'WhatsApp Integration',
-            'Instant Confirmations',
-            'Automated Reminders',
-            'Reservation Dashboard',
-            'Multi-Branch Support',
+            {
+              title: '24/7 AI Assistant',
+              description: "Never miss a booking again. Boeking's AI handles reservation requests at any hour — evenings, weekends, public holidays — so your restaurant is always open for bookings even when your staff aren't.",
+            },
+            {
+              title: 'WhatsApp Integration',
+              description: 'No new app, no web form. Customers book through the WhatsApp they already use every day. Your restaurant gets a dedicated number that handles the entire conversation from first message to confirmed table.',
+            },
+            {
+              title: 'Instant Confirmations',
+              description: 'Every booking is confirmed in seconds with a reference number sent directly to the customer. No back-and-forth, no waiting on a callback — just a clean, professional confirmation they can refer back to.',
+            },
+            {
+              title: 'Automated Reminders',
+              description: 'Reduce no-shows with automatic WhatsApp reminders sent 24 hours and 2 hours before each reservation. Customers can confirm, cancel or modify directly in the chat — all synced to your dashboard in real time.',
+            },
+            {
+              title: 'Reservation Dashboard',
+              description: 'A clean, real-time view of every booking across the day. Your front-of-house staff can see upcoming reservations, add walk-ins, flag special requests and manage cancellations — all from one simple screen.',
+            },
+            {
+              title: 'Multi-Branch Support',
+              description: 'Running more than one location? Boeking manages each venue independently under one account. Separate WhatsApp numbers, separate calendars, separate dashboards — with a single login to oversee them all.',
+            },
           ].map((feature) => (
             <div
-              key={feature}
+              key={feature.title}
               className="bg-white/[0.03] border border-white/5 rounded-3xl p-8 hover:border-green-500/30 hover:bg-white/[0.05] transition"
             >
               <div className="w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-400 text-2xl mb-6">
                 ✦
               </div>
 
-              <h3 className="text-2xl font-semibold mb-3">{feature}</h3>
+              <h3 className="text-2xl font-semibold mb-3">{feature.title}</h3>
 
               <p className="text-gray-400 leading-relaxed">
-                Designed to help restaurants reduce missed calls, eliminate no-shows, and improve customer experience.
+                {feature.description}
               </p>
             </div>
           ))}
@@ -238,16 +261,54 @@ export default function BoekingLandingPage() {
               title: 'Starter',
               price: 'R599',
               featured: false,
+              features: [
+                '1 restaurant',
+                'Up to 200 bookings/month',
+                'WhatsApp AI booking bot',
+                'Google Calendar sync',
+                '24hr reminders',
+                'Basic dashboard',
+              ],
+              missing: [
+                'Customer history & no-show tracking',
+                'Custom bot branding',
+                'Multi-branch support',
+              ],
             },
             {
               title: 'Growth',
-              price: 'R1099',
+              price: 'R1,299',
               featured: true,
+              features: [
+                '1 restaurant',
+                'Unlimited bookings',
+                'WhatsApp AI booking bot',
+                'Google Calendar sync',
+                '24hr + 2hr reminders',
+                'Full staff dashboard',
+                'Customer history & no-show tracking',
+                'Custom greeting + branding',
+              ],
+              missing: [
+                'Multi-branch support',
+              ],
             },
             {
               title: 'Enterprise',
               price: 'Custom',
               featured: false,
+              features: [
+                'Up to 5 locations',
+                'Unlimited bookings',
+                'WhatsApp AI booking bot',
+                'Google Calendar sync',
+                'Custom reminder schedule',
+                'Multi-location dashboard',
+                'Customer history & no-show tracking',
+                'Custom branding',
+                'Dedicated account manager',
+              ],
+              missing: [],
             },
           ].map((plan) => (
             <div
@@ -272,11 +333,13 @@ export default function BoekingLandingPage() {
                 )}
               </div>
 
-              <ul className={`space-y-4 mb-10 ${plan.featured ? 'text-black/80' : 'text-gray-400'}`}>
-                <li>✓ AI-powered bookings</li>
-                <li>✓ WhatsApp integration</li>
-                <li>✓ Reservation dashboard</li>
-                <li>✓ Automated reminders</li>
+              <ul className={`space-y-3 mb-10 ${plan.featured ? 'text-black/80' : 'text-gray-400'}`}>
+                {plan.features.map((f) => (
+                  <li key={f}>✓ {f}</li>
+                ))}
+                {plan.missing.map((f) => (
+                  <li key={f} className={plan.featured ? 'text-black/40' : 'text-gray-600'}>– {f}</li>
+                ))}
               </ul>
 
               <button
