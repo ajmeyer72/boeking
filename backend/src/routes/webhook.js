@@ -1,8 +1,9 @@
 const express = require('express')
 const router = express.Router()
-const { handleIncomingMessage } = require('../services/messageHandler')
+const messageHandler = require('../services/messageHandler')
 
-// Meta webhook verification
+console.log('messageHandler exports:', Object.keys(messageHandler))
+
 router.get('/', (req, res) => {
   const mode = req.query['hub.mode']
   const token = req.query['hub.verify_token']
@@ -16,7 +17,6 @@ router.get('/', (req, res) => {
   }
 })
 
-// Incoming WhatsApp messages
 router.post('/', async (req, res) => {
   try {
     const body = req.body
@@ -29,8 +29,10 @@ router.post('/', async (req, res) => {
       const from = message.from
       const text = message.text?.body
 
+      console.log('handleIncomingMessage type:', typeof messageHandler.handleIncomingMessage)
+
       if (text) {
-        await handleIncomingMessage(from, text)
+        await messageHandler.handleIncomingMessage(from, text)
       }
     }
 
