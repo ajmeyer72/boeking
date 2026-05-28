@@ -1,71 +1,102 @@
-const Anthropic = require('@anthropic-ai/sdk')
+const { Pool } = require('pg')
 
-const client = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY })
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+})
 
-const systemPrompt = `You are a friendly and professional restaurant reservation assistant for a restaurant using the Boeking platform.
+const getOrCreateConversation = async (from) => {
+  // Find existing open conversation
+  const existing = await pool.query(
+    `SELECT c.*, cu.name as customer_name 
+     FROM conversations c
+     LEFT JOIN customers cu ON cu.id = c.customer_id
+     WHERE c.whatsapp_thread_id = $1
+     AND c.state != 'confirmed'
+     ORDER BY c.last_message_at DESC
+     LIMIT 1`,
+    [from]
+  )
 
-Your job is to help customers make, modify or cancel table reservations via WhatsApp.
-
-You collect the following information in a natural conversational way:
-1. Preferred date
-2. Preferred time
-3. Party size
-4. Customer name (if new customer)
-5. Any special requests (optional)
-
-Once you have all the details, summarise the booking and ask for confirmation.
-
-Current conversation state: {STATE}
-Context data collected so far: {CONTEXT}
-
-Rules:
-- Be warm, friendly and concise — this is WhatsApp, not email
-- Ask one question at a time
-- If the customer says something unclear, politely ask again
-- If the customer wants to cancel or modify, help them do so
-- Always confirm the booking details before finalising
-- Reply in the same language the customer uses
-
-When you have collected all details and the customer confirms, end your reply with:
-BOOKING_CONFIRMED: date=<date>, time=<time>, party=<size>, name=<name>, requests=<requests or none>`
-
-const processWithAI = async (userMessage, conversation) => {
-  const state = conversation.state || 'new'
-  const context = JSON.stringify(conversation.context_data || {})
-
-  const prompt = systemPrompt
-    .replace('{STATE}', state)
-    .replace('{CONTEXT}', context)
-
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1000,
-    system: prompt,
-    messages: [
-      ...buildMessageHistory(conversation),
-      { role: 'user', content: userMessage }
-    ],
-  })
-
-  const reply = response.content[0].text
-
-  // Detect if booking was confirmed
-  let newState = state
-  if (reply.includes('BOOKING_CONFIRMED:')) {
-    newState = 'confirmed'
-  } else if (state === 'new') {
-    newState = 'in_progress'
+  if (existing.rows.length > 0) {
+    return existing.rows[0]
   }
 
-  // Strip the BOOKING_CONFIRMED tag from the customer-facing reply
-  const cleanReply = reply.replace(/BOOKING_CONFIRMED:.*$/s, '').trim()
+  // Get the test restaurant
+  const restaurant = await pool.query(
+    `SELECT id FROM restaurants WHERE slug = 'test-restaurant' LIMIT 1`
+  )
+  const restaurantId = restaurant.rows[0].id
 
-  return { reply: cleanReply, newState }
+  // Find or create customer
+  let customer = await pool.query(
+    `SELECT * FROM customers 
+     WHERE whatsapp_number = $1 
+     AND restaurant_id = $2`,
+    [from, restaurantId]
+  )
+
+  if (customer.rows.length === 0) {
+    customer = await pool.query(
+      `INSERT INTO customers (restaurant_id, whatsapp_number)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [restaurantId, from]
+    )
+  }
+
+  const customerId = customer.rows[0].id
+
+  // Create new conversation
+  const conversation = await pool.query(
+    `INSERT INTO conversations 
+     (restaurant_id, customer_id, whatsapp_thread_id, state, context_data)
+     VALUES ($1, $2, $3, 'new', '{}')
+     RETURNING *`,
+    [restaurantId, customerId, from]
+  )
+
+  return {
+    ...conversation.rows[0],
+    customer_name: customer.rows[0].name
+  }
 }
 
-const buildMessageHistory = (conversation) => {
-  // For now return empty — we'll add full history once DB is connected
-  return []
+const updateConversationState = async (from, newState, contextData = null) => {
+  if (contextData) {
+    await pool.query(
+      `UPDATE conversations 
+       SET state = $1, context_data = $2, last_message_at = NOW()
+       WHERE whatsapp_thread_id = $3 AND state != 'confirmed'`,
+      [newState, JSON.stringify(contextData), from]
+    )
+  } else {
+    await pool.query(
+      `UPDATE conversations 
+       SET state = $1, last_message_at = NOW()
+       WHERE whatsapp_thread_id = $2 AND state != 'confirmed'`,
+      [newState, from]
+    )
+  }
 }
 
-module.exports = { processWithAI }
+const saveMessage = async (from, direction, content) => {
+  const conversation = await pool.query(
+    `SELECT id FROM conversations 
+     WHERE whatsapp_thread_id = $1 
+     AND state != 'confirmed'
+     ORDER BY last_message_at DESC
+     LIMIT 1`,
+    [from]
+  )
+
+  if (conversation.rows.length > 0) {
+    await pool.query(
+      `INSERT INTO messages (conversation_id, direction, content)
+       VALUES ($1, $2, $3)`,
+      [conversation.rows[0].id, direction, content]
+    )
+  }
+}
+
+module.exports = { getOrCreateConversation, updateConversationState, saveMessage }
