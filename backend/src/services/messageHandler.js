@@ -1,3 +1,4 @@
+// v2 - inlined functions
 const { sendMessage } = require('./metaService')
 const { processWithAI } = require('./aiService')
 const { Pool } = require('pg')
