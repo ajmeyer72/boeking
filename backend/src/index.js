@@ -2,13 +2,20 @@ const express = require('express')
 const dotenv = require('dotenv')
 const { Pool } = require('pg')
 const { startReminderService } = require('./services/reminderService')
+const cors = require('cors')
 
 dotenv.config()
 
 const webhookRoutes = require('./routes/webhook')
+const authRoutes = require('./routes/auth')
+const dashboardRoutes = require('./routes/dashboard')
 
 const app = express()
 app.use(express.json())
+app.use(cors({
+  origin: ['https://www.boeking.co.za', 'http://localhost:3000'],
+  credentials: true
+}))
 
 // Test database connection on startup
 const pool = new Pool({
@@ -32,6 +39,8 @@ app.use((req, res, next) => {
 })
 
 app.use('/webhook', webhookRoutes)
+app.use('/auth', authRoutes)
+app.use('/dashboard', dashboardRoutes)
 
 app.get('/health', (req, res) => {
   res.json({ status: 'Boeking backend is running' })
