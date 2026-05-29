@@ -8,7 +8,6 @@ const pool = new Pool({
 })
 
 const getOrCreateConversation = async (from) => {
-  // Check for an active in-progress conversation first
   const active = await pool.query(
     `SELECT c.*, cu.name as customer_name
      FROM conversations c
@@ -24,13 +23,11 @@ const getOrCreateConversation = async (from) => {
     return active.rows[0]
   }
 
-  // Get the restaurant
   const restaurant = await pool.query(
     `SELECT id FROM restaurants WHERE slug = 'test-restaurant' LIMIT 1`
   )
   const restaurantId = restaurant.rows[0].id
 
-  // Find or create customer
   let customer = await pool.query(
     `SELECT * FROM customers
      WHERE whatsapp_number = $1
@@ -50,7 +47,6 @@ const getOrCreateConversation = async (from) => {
   const customerId = customer.rows[0].id
   const customerName = customer.rows[0].name
 
-  // Check for existing confirmed reservations
   const existingBooking = await pool.query(
     `SELECT * FROM reservations
      WHERE customer_id = $1
@@ -61,7 +57,6 @@ const getOrCreateConversation = async (from) => {
     [customerId]
   )
 
-  // Create new conversation
   const conversation = await pool.query(
     `INSERT INTO conversations
      (restaurant_id, customer_id, whatsapp_thread_id, state, context_data)
@@ -102,6 +97,8 @@ const updateConversationState = async (conversationId, newState) => {
 }
 
 const saveReservation = async (conversation, bookingDetails) => {
+  console.log('Saving reservation with details:', bookingDetails)
+
   await pool.query(
     `INSERT INTO reservations
      (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
@@ -111,40 +108,37 @@ const saveReservation = async (conversation, bookingDetails) => {
       conversation.customer_id,
       bookingDetails.date,
       bookingDetails.time,
-      bookingDetails.party,
-      bookingDetails.requests || null
+      parseInt(bookingDetails.party),
+      bookingDetails.requests === 'none' ? null : bookingDetails.requests
     ]
   )
 
-  // Update customer name if we have it
   if (bookingDetails.name) {
     await pool.query(
       `UPDATE customers SET name = $1, total_bookings = total_bookings + 1
        WHERE id = $2`,
       [bookingDetails.name, conversation.customer_id]
     )
+    console.log('Customer name updated to:', bookingDetails.name)
   }
 }
 
 const parseBookingDetails = (reply) => {
-  const match = reply.match(/BOOKING_CONFIRMED:(.*?)$/s)
-  if (!match) return null
+  const match = reply.match(/BOOKING_CONFIRMED:\s*date=([^,]+),\s*time=([^,]+),\s*party=([^,]+),\s*name=([^,]+),\s*requests=(.+)/i)
+  if (!match) {
+    console.log('No BOOKING_CONFIRMED tag found in reply')
+    return null
+  }
 
-  const details = {}
-  const str = match[1]
+  const details = {
+    date: match[1].trim(),
+    time: match[2].trim(),
+    party: match[3].trim(),
+    name: match[4].trim(),
+    requests: match[5].trim()
+  }
 
-  const dateMatch = str.match(/date=([^,]+)/)
-  const timeMatch = str.match(/time=([^,]+)/)
-  const partyMatch = str.match(/party=([^,]+)/)
-  const nameMatch = str.match(/name=([^,]+)/)
-  const requestsMatch = str.match(/requests=(.+)/)
-
-  if (dateMatch) details.date = dateMatch[1].trim()
-  if (timeMatch) details.time = timeMatch[1].trim()
-  if (partyMatch) details.party = parseInt(partyMatch[1].trim())
-  if (nameMatch) details.name = nameMatch[1].trim()
-  if (requestsMatch) details.requests = requestsMatch[1].trim()
-
+  console.log('Parsed booking details:', details)
   return details
 }
 
@@ -157,15 +151,14 @@ const handleIncomingMessage = async (from, text) => {
 
     await saveMessage(conversation.id, 'inbound', text)
 
-    const { reply, newState } = await processWithAI(text, conversation)
+    const { reply, newState, rawReply } = await processWithAI(text, conversation)
     console.log('AI reply:', reply)
 
-    // If booking confirmed, save reservation to database
-    if (reply.includes('BOOKING_CONFIRMED:')) {
-      const bookingDetails = parseBookingDetails(reply)
+    if (rawReply && rawReply.includes('BOOKING_CONFIRMED:')) {
+      const bookingDetails = parseBookingDetails(rawReply)
       if (bookingDetails) {
         await saveReservation(conversation, bookingDetails)
-        console.log('Reservation saved to database:', bookingDetails)
+        console.log('Reservation saved successfully')
       }
     }
 

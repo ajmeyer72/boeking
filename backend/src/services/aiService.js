@@ -8,14 +8,25 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-const systemPrompt = `You are a friendly and professional restaurant reservation assistant for a restaurant using the Boeking platform.
+const getSystemPrompt = () => {
+  const today = new Date().toLocaleDateString('en-ZA', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'Africa/Johannesburg'
+  })
+
+  return `You are a friendly and professional restaurant reservation assistant for a restaurant using the Boeking platform.
+
+Today's date is ${today}. Use this to correctly interpret relative dates like "next Monday" or "this Sunday".
 
 Your job is to help customers make, modify or cancel table reservations via WhatsApp.
 
 At the start of each conversation you will receive context data. If it contains an existingBooking, the customer already has a confirmed reservation — greet them by name and show their booking details, then ask if they would like to make a change, cancel, or make a new booking. Do not ask them for information you already have.
 
 If there is no existing booking, collect the following in a natural conversational way:
-1. Preferred date (always confirm the actual calendar date e.g. "Just to confirm, that's Sunday 1 June — correct?")
+1. Preferred date (always confirm the actual calendar date e.g. "Just to confirm, that's Monday 2 June 2026 — correct?")
 2. Preferred time
 3. Party size
 4. Customer name
@@ -27,13 +38,14 @@ Rules:
 - Be warm, friendly and concise - this is WhatsApp, not email
 - Ask one question at a time
 - Never ask for information the customer has already provided
-- When a customer gives a vague date like "this Sunday", always confirm the actual date
+- Always confirm the actual calendar date when customer uses relative terms like "next Monday", "this Sunday", "tomorrow"
 - If the customer says something unclear, politely ask again
 - Always confirm booking details before finalising
 - Reply in the same language the customer uses
 
-When the customer confirms, end your reply with:
-BOOKING_CONFIRMED: date=<date>, time=<time>, party=<size>, name=<name>, requests=<requests or none>`
+When the customer confirms, you MUST end your reply with this exact tag on a new line:
+BOOKING_CONFIRMED: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>, name=<full name>, requests=<details or none>`
+}
 
 const getConversationHistory = async (conversationId) => {
   const result = await pool.query(
@@ -52,13 +64,23 @@ const getConversationHistory = async (conversationId) => {
 const processWithAI = async (userMessage, conversation) => {
   console.log('Calling Claude API with model: claude-sonnet-4-5')
 
-  // Get full conversation history from database
   const history = await getConversationHistory(conversation.id)
-
-  // Build messages array — history already includes current message
-  // since we saved it before calling processWithAI
-  // So we don't add userMessage again
   const messages = history.length > 0 ? history : [{ role: 'user', content: userMessage }]
+
+  // Inject context as first user message if this is a new conversation
+  const contextData = conversation.context_data || {}
+  let systemPrompt = getSystemPrompt()
+
+  if (contextData.existingBooking) {
+    const b = contextData.existingBooking
+    systemPrompt += `\n\nCONTEXT: This customer has an existing confirmed booking:
+- Date: ${b.reservation_date}
+- Time: ${b.reservation_time}
+- Party size: ${b.party_size}
+- Name: ${contextData.customerName || 'valued customer'}
+- Special requests: ${b.special_requests || 'none'}
+Greet them by name and show these details. Ask if they want to modify, cancel, or make a new booking.`
+  }
 
   const response = await client.messages.create({
     model: 'claude-sonnet-4-5',
@@ -79,7 +101,7 @@ const processWithAI = async (userMessage, conversation) => {
 
   const cleanReply = reply.replace(/BOOKING_CONFIRMED:.*$/s, '').trim()
 
-  return { reply: cleanReply, newState }
+  return { reply: cleanReply, newState, rawReply: reply }
 }
 
 module.exports = { processWithAI }
