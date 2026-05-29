@@ -1,6 +1,7 @@
 const express = require('express')
 const dotenv = require('dotenv')
 const { Pool } = require('pg')
+const { startReminderService } = require('./services/reminderService')
 
 dotenv.config()
 
@@ -35,6 +36,9 @@ app.use('/webhook', webhookRoutes)
 app.get('/health', (req, res) => {
   res.json({ status: 'Boeking backend is running' })
 })
+
+// Start reminder cron job
+startReminderService()
 
 const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
