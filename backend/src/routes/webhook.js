@@ -4,6 +4,10 @@ const messageHandler = require('../services/messageHandler')
 
 console.log('messageHandler exports:', Object.keys(messageHandler))
 
+// Deduplication store
+const processedMessages = new Set()
+
+// Meta webhook verification
 router.get('/', (req, res) => {
   const mode = req.query['hub.mode']
   const token = req.query['hub.verify_token']
@@ -17,6 +21,7 @@ router.get('/', (req, res) => {
   }
 })
 
+// Incoming WhatsApp messages
 router.post('/', async (req, res) => {
   try {
     const body = req.body
@@ -28,8 +33,19 @@ router.post('/', async (req, res) => {
       const message = body.entry[0].changes[0].value.messages[0]
       const from = message.from
       const text = message.text?.body
+      const messageId = message.id
 
-      console.log('handleIncomingMessage type:', typeof messageHandler.handleIncomingMessage)
+      // Ignore duplicate messages
+      if (processedMessages.has(messageId)) {
+        console.log('Duplicate message ignored:', messageId)
+        return res.status(200).send('OK')
+      }
+
+      // Mark message as processed
+      processedMessages.add(messageId)
+
+      // Clean up after 5 minutes
+      setTimeout(() => processedMessages.delete(messageId), 5 * 60 * 1000)
 
       if (text) {
         await messageHandler.handleIncomingMessage(from, text)
