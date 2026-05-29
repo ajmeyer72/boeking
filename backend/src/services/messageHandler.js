@@ -99,7 +99,6 @@ const updateConversationState = async (conversationId, newState) => {
 const saveReservation = async (conversation, bookingDetails) => {
   console.log('Saving reservation with details:', bookingDetails)
 
-  // Check if customer already has a confirmed upcoming reservation
   const existing = await pool.query(
     `SELECT id FROM reservations
      WHERE customer_id = $1
@@ -111,7 +110,6 @@ const saveReservation = async (conversation, bookingDetails) => {
   )
 
   if (existing.rows.length > 0) {
-    // Update existing reservation
     await pool.query(
       `UPDATE reservations
        SET reservation_date = $1,
@@ -130,7 +128,6 @@ const saveReservation = async (conversation, bookingDetails) => {
     )
     console.log('Existing reservation updated:', existing.rows[0].id)
   } else {
-    // Insert new reservation
     await pool.query(
       `INSERT INTO reservations
        (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
@@ -155,6 +152,31 @@ const saveReservation = async (conversation, bookingDetails) => {
     )
     console.log('Customer name updated to:', bookingDetails.name)
   }
+}
+
+const cancelReservation = async (customerId) => {
+  const result = await pool.query(
+    `UPDATE reservations
+     SET status = 'cancelled', updated_at = NOW()
+     WHERE customer_id = $1
+     AND status = 'confirmed'
+     AND reservation_date >= CURRENT_DATE
+     RETURNING *`,
+    [customerId]
+  )
+
+  if (result.rows.length > 0) {
+    // Log a cancellation notification
+    await pool.query(
+      `INSERT INTO notifications (reservation_id, type, status, scheduled_for, sent_at)
+       VALUES ($1, 'cancellation', 'sent', NOW(), NOW())`,
+      [result.rows[0].id]
+    )
+    console.log('Reservation cancelled:', result.rows[0].id)
+    return result.rows[0]
+  }
+
+  return null
 }
 
 const parseBookingDetails = (reply) => {
@@ -188,11 +210,20 @@ const handleIncomingMessage = async (from, text) => {
     const { reply, newState, rawReply } = await processWithAI(text, conversation)
     console.log('AI reply:', reply)
 
+    // Handle booking confirmation
     if (rawReply && rawReply.includes('BOOKING_CONFIRMED:')) {
       const bookingDetails = parseBookingDetails(rawReply)
       if (bookingDetails) {
         await saveReservation(conversation, bookingDetails)
         console.log('Reservation saved successfully')
+      }
+    }
+
+    // Handle cancellation
+    if (rawReply && rawReply.includes('BOOKING_CANCELLED')) {
+      const cancelled = await cancelReservation(conversation.customer_id)
+      if (cancelled) {
+        console.log('Reservation cancelled successfully')
       }
     }
 
