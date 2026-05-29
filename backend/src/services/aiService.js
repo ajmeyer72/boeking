@@ -38,7 +38,7 @@ const processWithAI = async (userMessage, conversation) => {
     .replace('{CONTEXT}', context)
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 1000,
     system: prompt,
     messages: [
