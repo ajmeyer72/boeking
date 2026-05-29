@@ -1,4 +1,3 @@
-// v2 - inlined functions
 const { sendMessage } = require('./metaService')
 const { processWithAI } = require('./aiService')
 const { Pool } = require('pg')
@@ -9,29 +8,32 @@ const pool = new Pool({
 })
 
 const getOrCreateConversation = async (from) => {
-  const existing = await pool.query(
-    `SELECT c.*, cu.name as customer_name 
+  // Check for an active in-progress conversation first
+  const active = await pool.query(
+    `SELECT c.*, cu.name as customer_name
      FROM conversations c
      LEFT JOIN customers cu ON cu.id = c.customer_id
      WHERE c.whatsapp_thread_id = $1
-     AND c.state != 'confirmed'
+     AND c.state = 'in_progress'
      ORDER BY c.last_message_at DESC
      LIMIT 1`,
     [from]
   )
 
-  if (existing.rows.length > 0) {
-    return existing.rows[0]
+  if (active.rows.length > 0) {
+    return active.rows[0]
   }
 
+  // Get the restaurant
   const restaurant = await pool.query(
     `SELECT id FROM restaurants WHERE slug = 'test-restaurant' LIMIT 1`
   )
   const restaurantId = restaurant.rows[0].id
 
+  // Find or create customer
   let customer = await pool.query(
-    `SELECT * FROM customers 
-     WHERE whatsapp_number = $1 
+    `SELECT * FROM customers
+     WHERE whatsapp_number = $1
      AND restaurant_id = $2`,
     [from, restaurantId]
   )
@@ -46,47 +48,104 @@ const getOrCreateConversation = async (from) => {
   }
 
   const customerId = customer.rows[0].id
+  const customerName = customer.rows[0].name
 
+  // Check for existing confirmed reservations
+  const existingBooking = await pool.query(
+    `SELECT * FROM reservations
+     WHERE customer_id = $1
+     AND status = 'confirmed'
+     AND reservation_date >= CURRENT_DATE
+     ORDER BY reservation_date ASC
+     LIMIT 1`,
+    [customerId]
+  )
+
+  // Create new conversation
   const conversation = await pool.query(
-    `INSERT INTO conversations 
+    `INSERT INTO conversations
      (restaurant_id, customer_id, whatsapp_thread_id, state, context_data)
-     VALUES ($1, $2, $3, 'new', '{}')
+     VALUES ($1, $2, $3, 'new', $4)
      RETURNING *`,
-    [restaurantId, customerId, from]
+    [
+      restaurantId,
+      customerId,
+      from,
+      JSON.stringify({
+        existingBooking: existingBooking.rows[0] || null,
+        customerName: customerName || null
+      })
+    ]
   )
 
   return {
     ...conversation.rows[0],
-    customer_name: customer.rows[0].name
+    customer_name: customerName
   }
 }
 
-const saveMessage = async (from, direction, content) => {
-  const conversation = await pool.query(
-    `SELECT id FROM conversations 
-     WHERE whatsapp_thread_id = $1 
-     AND state != 'confirmed'
-     ORDER BY last_message_at DESC
-     LIMIT 1`,
-    [from]
+const saveMessage = async (conversationId, direction, content) => {
+  await pool.query(
+    `INSERT INTO messages (conversation_id, direction, content)
+     VALUES ($1, $2, $3)`,
+    [conversationId, direction, content]
+  )
+}
+
+const updateConversationState = async (conversationId, newState) => {
+  await pool.query(
+    `UPDATE conversations
+     SET state = $1, last_message_at = NOW()
+     WHERE id = $2`,
+    [newState, conversationId]
+  )
+}
+
+const saveReservation = async (conversation, bookingDetails) => {
+  await pool.query(
+    `INSERT INTO reservations
+     (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')`,
+    [
+      conversation.restaurant_id,
+      conversation.customer_id,
+      bookingDetails.date,
+      bookingDetails.time,
+      bookingDetails.party,
+      bookingDetails.requests || null
+    ]
   )
 
-  if (conversation.rows.length > 0) {
+  // Update customer name if we have it
+  if (bookingDetails.name) {
     await pool.query(
-      `INSERT INTO messages (conversation_id, direction, content)
-       VALUES ($1, $2, $3)`,
-      [conversation.rows[0].id, direction, content]
+      `UPDATE customers SET name = $1, total_bookings = total_bookings + 1
+       WHERE id = $2`,
+      [bookingDetails.name, conversation.customer_id]
     )
   }
 }
 
-const updateConversationState = async (from, newState) => {
-  await pool.query(
-    `UPDATE conversations 
-     SET state = $1, last_message_at = NOW()
-     WHERE whatsapp_thread_id = $2 AND state != 'confirmed'`,
-    [newState, from]
-  )
+const parseBookingDetails = (reply) => {
+  const match = reply.match(/BOOKING_CONFIRMED:(.*?)$/s)
+  if (!match) return null
+
+  const details = {}
+  const str = match[1]
+
+  const dateMatch = str.match(/date=([^,]+)/)
+  const timeMatch = str.match(/time=([^,]+)/)
+  const partyMatch = str.match(/party=([^,]+)/)
+  const nameMatch = str.match(/name=([^,]+)/)
+  const requestsMatch = str.match(/requests=(.+)/)
+
+  if (dateMatch) details.date = dateMatch[1].trim()
+  if (timeMatch) details.time = timeMatch[1].trim()
+  if (partyMatch) details.party = parseInt(partyMatch[1].trim())
+  if (nameMatch) details.name = nameMatch[1].trim()
+  if (requestsMatch) details.requests = requestsMatch[1].trim()
+
+  return details
 }
 
 const handleIncomingMessage = async (from, text) => {
@@ -96,14 +155,22 @@ const handleIncomingMessage = async (from, text) => {
     const conversation = await getOrCreateConversation(from)
     console.log('Conversation retrieved:', conversation.id)
 
-    await saveMessage(from, 'inbound', text)
-    console.log('Inbound message saved')
+    await saveMessage(conversation.id, 'inbound', text)
 
     const { reply, newState } = await processWithAI(text, conversation)
     console.log('AI reply:', reply)
 
-    await updateConversationState(from, newState)
-    await saveMessage(from, 'outbound', reply)
+    // If booking confirmed, save reservation to database
+    if (reply.includes('BOOKING_CONFIRMED:')) {
+      const bookingDetails = parseBookingDetails(reply)
+      if (bookingDetails) {
+        await saveReservation(conversation, bookingDetails)
+        console.log('Reservation saved to database:', bookingDetails)
+      }
+    }
+
+    await updateConversationState(conversation.id, newState)
+    await saveMessage(conversation.id, 'outbound', reply)
     await sendMessage(from, reply)
 
   } catch (error) {
