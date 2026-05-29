@@ -19,7 +19,7 @@ Current conversation state: {STATE}
 Context data collected so far: {CONTEXT}
 
 Rules:
-- Be warm, friendly and concise — this is WhatsApp, not email
+- Be warm, friendly and concise - this is WhatsApp, not email
 - Ask one question at a time
 - If the customer says something unclear, politely ask again
 - If the customer wants to cancel or modify, help them do so
@@ -37,19 +37,19 @@ const processWithAI = async (userMessage, conversation) => {
     .replace('{STATE}', state)
     .replace('{CONTEXT}', context)
 
+  console.log('Calling Claude API with model: claude-sonnet-4-5')
+
   const response = await client.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 1000,
     system: prompt,
     messages: [
-      ...buildMessageHistory(conversation),
       { role: 'user', content: userMessage }
     ],
   })
 
   const reply = response.content[0].text
 
-  // Detect if booking was confirmed
   let newState = state
   if (reply.includes('BOOKING_CONFIRMED:')) {
     newState = 'confirmed'
@@ -57,14 +57,12 @@ const processWithAI = async (userMessage, conversation) => {
     newState = 'in_progress'
   }
 
-  // Strip the BOOKING_CONFIRMED tag from the customer-facing reply
   const cleanReply = reply.replace(/BOOKING_CONFIRMED:.*$/s, '').trim()
 
   return { reply: cleanReply, newState }
 }
 
 const buildMessageHistory = (conversation) => {
-  // For now return empty — we'll add full history once DB is connected
   return []
 }
 
