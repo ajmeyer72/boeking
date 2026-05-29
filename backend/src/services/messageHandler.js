@@ -99,19 +99,53 @@ const updateConversationState = async (conversationId, newState) => {
 const saveReservation = async (conversation, bookingDetails) => {
   console.log('Saving reservation with details:', bookingDetails)
 
-  await pool.query(
-    `INSERT INTO reservations
-     (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
-     VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')`,
-    [
-      conversation.restaurant_id,
-      conversation.customer_id,
-      bookingDetails.date,
-      bookingDetails.time,
-      parseInt(bookingDetails.party),
-      bookingDetails.requests === 'none' ? null : bookingDetails.requests
-    ]
+  // Check if customer already has a confirmed upcoming reservation
+  const existing = await pool.query(
+    `SELECT id FROM reservations
+     WHERE customer_id = $1
+     AND status = 'confirmed'
+     AND reservation_date >= CURRENT_DATE
+     ORDER BY reservation_date ASC
+     LIMIT 1`,
+    [conversation.customer_id]
   )
+
+  if (existing.rows.length > 0) {
+    // Update existing reservation
+    await pool.query(
+      `UPDATE reservations
+       SET reservation_date = $1,
+           reservation_time = $2,
+           party_size = $3,
+           special_requests = $4,
+           updated_at = NOW()
+       WHERE id = $5`,
+      [
+        bookingDetails.date,
+        bookingDetails.time,
+        parseInt(bookingDetails.party),
+        bookingDetails.requests === 'none' ? null : bookingDetails.requests,
+        existing.rows[0].id
+      ]
+    )
+    console.log('Existing reservation updated:', existing.rows[0].id)
+  } else {
+    // Insert new reservation
+    await pool.query(
+      `INSERT INTO reservations
+       (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')`,
+      [
+        conversation.restaurant_id,
+        conversation.customer_id,
+        bookingDetails.date,
+        bookingDetails.time,
+        parseInt(bookingDetails.party),
+        bookingDetails.requests === 'none' ? null : bookingDetails.requests
+      ]
+    )
+    console.log('New reservation created')
+  }
 
   if (bookingDetails.name) {
     await pool.query(
