@@ -111,7 +111,10 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
     newState = 'in_progress'
   }
 
-const cleanReply = reply.replace(/\nBOOKING_CONFIRMED:.*$/s, '').trim()
+const cleanReply = reply
+  .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
+  .replace(/\nBOOKING_CANCELLED.*$/s, '')
+  .trim()
 
   return { reply: cleanReply, newState, rawReply: reply }
 }
