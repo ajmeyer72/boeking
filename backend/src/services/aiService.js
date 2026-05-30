@@ -76,19 +76,56 @@ const getConversationHistory = async (conversationId) => {
   }))
 }
 
-const extractDateTimeParty = (history) => {
-  // Look through conversation history for date, time and party size
-  const fullText = history.map(m => m.content).join(' ').toLowerCase()
+const extractDateTimeParty = (history, restaurantId) => {
+  const fullText = history.map(m => m.content).join('\n')
 
-  const dateMatch = fullText.match(/(\d{4}-\d{2}-\d{2})/)
-  const timeMatch = fullText.match(/(\d{2}:\d{2})/)
-  const partyMatch = fullText.match(/(\d+)\s*(people|guests|persons|pax)/)
+  // Look for ISO date format first
+  const isoDate = fullText.match(/(\d{4}-\d{2}-\d{2})/)
 
-  return {
-    date: dateMatch ? dateMatch[1] : null,
-    time: timeMatch ? timeMatch[1] : null,
-    party: partyMatch ? parseInt(partyMatch[1]) : null
+  // Look for time in various formats
+  const timeMatch = fullText.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i) ||
+                    fullText.match(/(\d{1,2})\s*(am|pm)/i) ||
+                    fullText.match(/(\d{2})h(\d{2})/i)
+
+  // Look for party size
+  const partyMatch = fullText.match(/(\d+)\s*(people|guests|persons|pax)/i) ||
+                     fullText.match(/party\s+of\s+(\d+)/i) ||
+                     fullText.match(/table\s+for\s+(\d+)/i)
+
+  let date = isoDate ? isoDate[1] : null
+  let time = null
+  let party = partyMatch ? parseInt(partyMatch[1]) : null
+
+  // Parse time into HH:MM format
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1])
+    const minutes = timeMatch[2] ? timeMatch[2].padStart(2, '0') : '00'
+    const meridiem = timeMatch[3]?.toLowerCase()
+
+    if (meridiem === 'pm' && hours < 12) hours += 12
+    if (meridiem === 'am' && hours === 12) hours = 0
+
+    // Handle cases like "11pm" = 23:00
+    if (!meridiem && fullText.toLowerCase().includes('pm') && hours < 12) hours += 12
+    if (fullText.toLowerCase().includes('11pm') || fullText.toLowerCase().includes('23h')) hours = 23
+
+    time = `${hours.toString().padStart(2, '0')}:${minutes}`
   }
+
+  // Handle "tomorrow" 
+  if (!date && fullText.toLowerCase().includes('tomorrow')) {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    date = tomorrow.toISOString().split('T')[0]
+  }
+
+  // Handle "today"
+  if (!date && fullText.toLowerCase().includes('today')) {
+    date = new Date().toISOString().split('T')[0]
+  }
+
+  console.log('Extracted date/time/party:', { date, time, party })
+  return { date, time, party }
 }
 
 const processWithAI = async (userMessage, conversation) => {
