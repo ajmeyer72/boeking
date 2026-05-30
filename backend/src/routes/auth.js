@@ -18,7 +18,7 @@ const checkRateLimit = (email) => {
 
   if (attempts) {
     // Reset if lockout period has passed (15 minutes)
-    if (now - attempts.firstAttempt > 15 * 60 * 1000) {
+    if (now - attempts.firstAttempt > 3 * 60 * 1000) {
       delete loginAttempts[email]
       return true
     }
@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
     // Check rate limit
     if (!checkRateLimit(normalizedEmail)) {
       return res.status(429).json({
-        error: 'Too many login attempts. Please try again in 15 minutes.'
+        error: 'Too many login attempts. Please try again in 3 minutes.'
       })
     }
 
