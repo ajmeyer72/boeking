@@ -13,7 +13,9 @@ const dashboardRoutes = require('./routes/dashboard')
 const app = express()
 app.use(express.json())
 app.use(cors({
-  origin: ['https://www.boeking.co.za', 'http://localhost:3000'],
+  origin: ['https://www.boeking.co.za', 
+           'https://boeking.co.za',
+           'http://localhost:3000'],
   credentials: true
 }))
 
