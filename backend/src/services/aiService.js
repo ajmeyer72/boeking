@@ -1,5 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk')
 const { Pool } = require('pg')
+const { checkAvailability, checkOperatingHours, checkBlockedDate } = require('./availabilityService')
 
 const client = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -8,7 +9,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-const getSystemPrompt = () => {
+const getSystemPrompt = (availabilityContext = '') => {
   const today = new Date().toLocaleDateString('en-ZA', {
     weekday: 'long',
     year: 'numeric',
@@ -32,21 +33,23 @@ If there is no existing booking, collect the following in a natural conversation
 4. Customer name
 5. Any special requests (optional)
 
-Once you have all details, summarise and ask for confirmation.
+${availabilityContext ? `AVAILABILITY INFORMATION:\n${availabilityContext}\n` : ''}
+
+Once you have all details and availability is confirmed, summarise and ask for confirmation.
 
 Rules:
 - Be warm, friendly and concise - this is WhatsApp, not email
 - Ask one question at a time
 - Never ask for information the customer has already provided
 - Always confirm the actual calendar date when customer uses relative terms
+- If a slot is unavailable, suggest the alternatives provided naturally e.g. "We're fully booked at 19:00 but we do have availability at 18:30 or 19:30 — would either of those work?"
 - If the customer says something unclear, politely ask again
 - Always confirm booking details before finalising
 - Reply in the same language the customer uses
 
 CANCELLATION HANDLING:
 - If the customer wants to cancel, confirm their booking details and ask them to confirm the cancellation
-- Once they confirm the cancellation, send a warm message and end with BOOKING_CANCELLED on a new line
-- Example cancellation confirmation message: "Your reservation has been cancelled. We hope to see you another time! 😊"
+- Once they confirm, send a warm message and end with BOOKING_CANCELLED on a new line
 
 MODIFICATION HANDLING:
 - If the customer wants to modify, collect the new details and confirm before saving
@@ -73,16 +76,67 @@ const getConversationHistory = async (conversationId) => {
   }))
 }
 
+const extractDateTimeParty = (history) => {
+  // Look through conversation history for date, time and party size
+  const fullText = history.map(m => m.content).join(' ').toLowerCase()
+
+  const dateMatch = fullText.match(/(\d{4}-\d{2}-\d{2})/)
+  const timeMatch = fullText.match(/(\d{2}:\d{2})/)
+  const partyMatch = fullText.match(/(\d+)\s*(people|guests|persons|pax)/)
+
+  return {
+    date: dateMatch ? dateMatch[1] : null,
+    time: timeMatch ? timeMatch[1] : null,
+    party: partyMatch ? parseInt(partyMatch[1]) : null
+  }
+}
+
 const processWithAI = async (userMessage, conversation) => {
   console.log('Calling Claude API with model: claude-sonnet-4-5')
 
   const history = await getConversationHistory(conversation.id)
   const messages = history.length > 0 ? history : [{ role: 'user', content: userMessage }]
 
-  // Inject context as first user message if this is a new conversation
-  const contextData = conversation.context_data || {}
-  let systemPrompt = getSystemPrompt()
+  // Try to extract date/time/party from conversation to check availability
+  let availabilityContext = ''
 
+  const extracted = extractDateTimeParty([...history, { content: userMessage }])
+
+  if (extracted.date && extracted.time && extracted.party) {
+    // Check blocked dates
+    const blockedCheck = await checkBlockedDate(conversation.restaurant_id, extracted.date)
+    if (blockedCheck.blocked) {
+      availabilityContext = `IMPORTANT: ${blockedCheck.message} Inform the customer and ask them to choose another date.`
+    } else {
+      // Check operating hours
+      const hoursCheck = await checkOperatingHours(conversation.restaurant_id, extracted.date, extracted.time)
+      if (!hoursCheck.open) {
+        availabilityContext = `IMPORTANT: ${hoursCheck.message} Inform the customer and ask them to choose another time.`
+      } else {
+        // Check availability
+        const availability = await checkAvailability(
+          conversation.restaurant_id,
+          extracted.date,
+          extracted.time,
+          extracted.party
+        )
+
+        if (!availability.available) {
+          if (availability.reason === 'fully_booked' && availability.alternatives?.length > 0) {
+            availabilityContext = `IMPORTANT: The requested time slot is fully booked. Available alternative times are: ${availability.alternatives.join(', ')}. Suggest these alternatives to the customer warmly.`
+          } else {
+            availabilityContext = `IMPORTANT: ${availability.message} Inform the customer politely.`
+          }
+        } else {
+          availabilityContext = `The requested slot is available. Proceed with the booking.`
+        }
+      }
+    }
+  }
+
+  let systemPrompt = getSystemPrompt(availabilityContext)
+
+  const contextData = conversation.context_data || {}
   if (contextData.existingBooking) {
     const b = contextData.existingBooking
     systemPrompt += `\n\nCONTEXT: This customer has an existing confirmed booking:
@@ -111,10 +165,10 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
     newState = 'in_progress'
   }
 
-const cleanReply = reply
-  .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
-  .replace(/\nBOOKING_CANCELLED.*$/s, '')
-  .trim()
+  const cleanReply = reply
+    .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
+    .replace(/\nBOOKING_CANCELLED.*$/s, '')
+    .trim()
 
   return { reply: cleanReply, newState, rawReply: reply }
 }
