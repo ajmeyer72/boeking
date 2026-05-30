@@ -9,7 +9,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-const getSystemPrompt = (availabilityContext = '') => {
+const getSystemPrompt = (availabilityContext = '', existingBookingContext = '') => {
   const today = new Date().toLocaleDateString('en-ZA', {
     weekday: 'long',
     year: 'numeric',
@@ -24,7 +24,7 @@ Today's date is ${today}. Use this to correctly interpret relative dates like "n
 
 Your job is to help customers make, modify or cancel table reservations via WhatsApp.
 
-At the start of each conversation you will receive context data. If it contains an existingBooking, the customer already has a confirmed reservation — greet them by name and show their booking details, then ask if they would like to modify it, cancel it, or make a new booking. Do not ask them for information you already have.
+${existingBookingContext}
 
 If there is no existing booking, collect the following in a natural conversational way:
 1. Preferred date (always confirm the actual calendar date e.g. "Just to confirm, that's Monday 2 June 2026 — correct?")
@@ -33,7 +33,7 @@ If there is no existing booking, collect the following in a natural conversation
 4. Customer name
 5. Any special requests (optional)
 
-${availabilityContext ? `AVAILABILITY INFORMATION:\n${availabilityContext}\n` : ''}
+${availabilityContext}
 
 Once you have all details and availability is confirmed, summarise and ask for confirmation.
 
@@ -42,7 +42,7 @@ Rules:
 - Ask one question at a time
 - Never ask for information the customer has already provided
 - Always confirm the actual calendar date when customer uses relative terms
-- If a slot is unavailable, suggest the alternatives provided naturally e.g. "We're fully booked at 19:00 but we do have availability at 18:30 or 19:30 — would either of those work?"
+- If a slot is unavailable, suggest the alternatives provided naturally
 - If the customer says something unclear, politely ask again
 - Always confirm booking details before finalising
 - Reply in the same language the customer uses
@@ -52,8 +52,10 @@ CANCELLATION HANDLING:
 - Once they confirm, send a warm message and end with BOOKING_CANCELLED on a new line
 
 MODIFICATION HANDLING:
-- If the customer wants to modify, collect the new details and confirm before saving
-- When confirmed, end with the BOOKING_CONFIRMED tag as usual with all updated details
+- If the customer wants to modify, collect the new details
+- Before confirming, you MUST check availability by including a CHECK_AVAILABILITY tag
+- Format: CHECK_AVAILABILITY: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>
+- Wait for availability confirmation before proceeding
 
 When the customer confirms a new booking or modification, you MUST end your reply with this exact tag on a new line:
 BOOKING_CONFIRMED: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>, name=<full name>, requests=<details or none>
@@ -76,56 +78,14 @@ const getConversationHistory = async (conversationId) => {
   }))
 }
 
-const extractDateTimeParty = (history, restaurantId) => {
-  const fullText = history.map(m => m.content).join('\n')
-
-  // Look for ISO date format first
-  const isoDate = fullText.match(/(\d{4}-\d{2}-\d{2})/)
-
-  // Look for time in various formats
-  const timeMatch = fullText.match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i) ||
-                    fullText.match(/(\d{1,2})\s*(am|pm)/i) ||
-                    fullText.match(/(\d{2})h(\d{2})/i)
-
-  // Look for party size
-  const partyMatch = fullText.match(/(\d+)\s*(people|guests|persons|pax)/i) ||
-                     fullText.match(/party\s+of\s+(\d+)/i) ||
-                     fullText.match(/table\s+for\s+(\d+)/i)
-
-  let date = isoDate ? isoDate[1] : null
-  let time = null
-  let party = partyMatch ? parseInt(partyMatch[1]) : null
-
-  // Parse time into HH:MM format
-  if (timeMatch) {
-    let hours = parseInt(timeMatch[1])
-    const minutes = timeMatch[2] ? timeMatch[2].padStart(2, '0') : '00'
-    const meridiem = timeMatch[3]?.toLowerCase()
-
-    if (meridiem === 'pm' && hours < 12) hours += 12
-    if (meridiem === 'am' && hours === 12) hours = 0
-
-    // Handle cases like "11pm" = 23:00
-    if (!meridiem && fullText.toLowerCase().includes('pm') && hours < 12) hours += 12
-    if (fullText.toLowerCase().includes('11pm') || fullText.toLowerCase().includes('23h')) hours = 23
-
-    time = `${hours.toString().padStart(2, '0')}:${minutes}`
+const parseCheckAvailability = (reply) => {
+  const match = reply.match(/CHECK_AVAILABILITY:\s*date=([^,]+),\s*time=([^,]+),\s*party=(\d+)/i)
+  if (!match) return null
+  return {
+    date: match[1].trim(),
+    time: match[2].trim(),
+    party: parseInt(match[3].trim())
   }
-
-  // Handle "tomorrow" 
-  if (!date && fullText.toLowerCase().includes('tomorrow')) {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    date = tomorrow.toISOString().split('T')[0]
-  }
-
-  // Handle "today"
-  if (!date && fullText.toLowerCase().includes('today')) {
-    date = new Date().toISOString().split('T')[0]
-  }
-
-  console.log('Extracted date/time/party:', { date, time, party })
-  return { date, time, party }
 }
 
 const processWithAI = async (userMessage, conversation) => {
@@ -134,66 +94,96 @@ const processWithAI = async (userMessage, conversation) => {
   const history = await getConversationHistory(conversation.id)
   const messages = history.length > 0 ? history : [{ role: 'user', content: userMessage }]
 
-  // Try to extract date/time/party from conversation to check availability
-  let availabilityContext = ''
-
-  const extracted = extractDateTimeParty([...history, { content: userMessage }])
-
-  if (extracted.date && extracted.time && extracted.party) {
-    // Check blocked dates
-    const blockedCheck = await checkBlockedDate(conversation.restaurant_id, extracted.date)
-    if (blockedCheck.blocked) {
-      availabilityContext = `IMPORTANT: ${blockedCheck.message} Inform the customer and ask them to choose another date.`
-    } else {
-      // Check operating hours
-      const hoursCheck = await checkOperatingHours(conversation.restaurant_id, extracted.date, extracted.time)
-      if (!hoursCheck.open) {
-        availabilityContext = `IMPORTANT: ${hoursCheck.message} Inform the customer and ask them to choose another time.`
-      } else {
-        // Check availability
-        const availability = await checkAvailability(
-          conversation.restaurant_id,
-          extracted.date,
-          extracted.time,
-          extracted.party
-        )
-
-        if (!availability.available) {
-          if (availability.reason === 'fully_booked' && availability.alternatives?.length > 0) {
-            availabilityContext = `IMPORTANT: The requested time slot is fully booked. Available alternative times are: ${availability.alternatives.join(', ')}. Suggest these alternatives to the customer warmly.`
-          } else {
-            availabilityContext = `IMPORTANT: ${availability.message} Inform the customer politely.`
-          }
-        } else {
-          availabilityContext = `The requested slot is available. Proceed with the booking.`
-        }
-      }
-    }
-  }
-
-  let systemPrompt = getSystemPrompt(availabilityContext)
-
+  // Build existing booking context
+  let existingBookingContext = ''
   const contextData = conversation.context_data || {}
   if (contextData.existingBooking) {
     const b = contextData.existingBooking
-    systemPrompt += `\n\nCONTEXT: This customer has an existing confirmed booking:
+    const name = contextData.customerName || 'valued customer'
+    existingBookingContext = `EXISTING BOOKING: This customer (${name}) has a confirmed reservation:
 - Date: ${b.reservation_date}
 - Time: ${b.reservation_time}
 - Party size: ${b.party_size}
-- Name: ${contextData.customerName || 'valued customer'}
 - Special requests: ${b.special_requests || 'none'}
 Greet them by name and show these details. Ask if they want to modify, cancel, or make a new booking.`
   }
 
-  const response = await client.messages.create({
+  // First pass — get Claude's response
+  let availabilityContext = ''
+  const systemPrompt = getSystemPrompt(availabilityContext, existingBookingContext)
+
+  let response = await client.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 1000,
     system: systemPrompt,
     messages,
   })
 
-  const reply = response.content[0].text
-  console.log('AI reply:', reply)
+  let reply = response.content[0].text
+  console.log('Initial AI reply:', reply)
+
+  // Check if Claude wants to check availability
+  const availabilityRequest = parseCheckAvailability(reply)
+
+  if (availabilityRequest) {
+    console.log('Checking availability for:', availabilityRequest)
+
+    let availabilityResult = ''
+
+    // Check blocked dates
+    const blockedCheck = await checkBlockedDate(conversation.restaurant_id, availabilityRequest.date)
+    if (blockedCheck.blocked) {
+      availabilityResult = `AVAILABILITY RESULT: Not available — ${blockedCheck.message}`
+    } else {
+      // Check operating hours
+      const hoursCheck = await checkOperatingHours(
+        conversation.restaurant_id,
+        availabilityRequest.date,
+        availabilityRequest.time
+      )
+
+      if (!hoursCheck.open) {
+        availabilityResult = `AVAILABILITY RESULT: Not available — ${hoursCheck.message}`
+      } else {
+        // Check capacity
+        const availability = await checkAvailability(
+          conversation.restaurant_id,
+          availabilityRequest.date,
+          availabilityRequest.time,
+          availabilityRequest.party
+        )
+
+        if (!availability.available) {
+          if (availability.alternatives?.length > 0) {
+            availabilityResult = `AVAILABILITY RESULT: Fully booked at ${availabilityRequest.time}. Available alternatives: ${availability.alternatives.join(', ')}.`
+          } else {
+            availabilityResult = `AVAILABILITY RESULT: Not available — ${availability.message}`
+          }
+        } else {
+          availabilityResult = `AVAILABILITY RESULT: Available — slot confirmed for ${availabilityRequest.date} at ${availabilityRequest.time} for ${availabilityRequest.party} guests.`
+        }
+      }
+    }
+
+    console.log('Availability result:', availabilityResult)
+
+    // Second pass — send availability result back to Claude
+    const messagesWithAvailability = [
+      ...messages,
+      { role: 'assistant', content: reply },
+      { role: 'user', content: availabilityResult }
+    ]
+
+    response = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1000,
+      system: getSystemPrompt(availabilityResult, existingBookingContext),
+      messages: messagesWithAvailability,
+    })
+
+    reply = response.content[0].text
+    console.log('Final AI reply:', reply)
+  }
 
   let newState = conversation.state || 'new'
   if (reply.includes('BOOKING_CONFIRMED:')) {
@@ -203,6 +193,7 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
   }
 
   const cleanReply = reply
+    .replace(/\nCHECK_AVAILABILITY:.*$/m, '')
     .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
     .replace(/\nBOOKING_CANCELLED.*$/s, '')
     .trim()
