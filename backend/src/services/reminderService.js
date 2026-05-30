@@ -11,29 +11,41 @@ const sendReminders = async () => {
   console.log('Running reminder check:', new Date().toISOString())
 
   try {
-    // Find reservations needing 24hr reminder
-    const twentyFourHour = await pool.query(
-      `SELECT r.*, c.whatsapp_number, c.name as customer_name
-       FROM reservations r
-       JOIN customers c ON c.id = r.customer_id
-       WHERE r.status = 'confirmed'
-       AND r.reservation_date = CURRENT_DATE + INTERVAL '1 day'
-       AND NOT EXISTS (
-         SELECT 1 FROM notifications n
-         WHERE n.reservation_id = r.id
-         AND n.type = 'reminder_24hr'
-         AND n.status = 'sent'
-       )`
-    )
+    const currentHour = new Date().toLocaleString('en-ZA', {
+      hour: 'numeric',
+      hour12: false,
+      timeZone: 'Africa/Johannesburg'
+    })
 
-    for (const reservation of twentyFourHour.rows) {
-      const message = formatReminderMessage(reservation, '24hr')
-      await sendMessage(reservation.whatsapp_number, message)
-      await logNotification(reservation.id, 'reminder_24hr')
-      console.log(`24hr reminder sent to ${reservation.whatsapp_number}`)
+    console.log('Current hour SA time:', currentHour)
+
+    // 24hr reminders — only send after 11am
+    if (parseInt(currentHour) >= 11) {
+      const twentyFourHour = await pool.query(
+        `SELECT r.*, c.whatsapp_number, c.name as customer_name
+         FROM reservations r
+         JOIN customers c ON c.id = r.customer_id
+         WHERE r.status = 'confirmed'
+         AND r.reservation_date = CURRENT_DATE + INTERVAL '1 day'
+         AND NOT EXISTS (
+           SELECT 1 FROM notifications n
+           WHERE n.reservation_id = r.id
+           AND n.type = 'reminder_24hr'
+           AND n.status = 'sent'
+         )`
+      )
+
+      for (const reservation of twentyFourHour.rows) {
+        const message = formatReminderMessage(reservation, '24hr')
+        await sendMessage(reservation.whatsapp_number, message)
+        await logNotification(reservation.id, 'reminder_24hr')
+        console.log(`24hr reminder sent to ${reservation.whatsapp_number}`)
+      }
+    } else {
+      console.log(`Skipping 24hr reminders — current hour is ${currentHour}:00, reminders start at 11:00`)
     }
 
-    // Find reservations needing 2hr reminder
+    // 2hr reminders — send any time
     const twoHour = await pool.query(
       `SELECT r.*, c.whatsapp_number, c.name as customer_name
        FROM reservations r
@@ -103,14 +115,10 @@ const logNotification = async (reservationId, type) => {
 }
 
 const startReminderService = () => {
-  // Run every hour at the top of the hour
   cron.schedule('0 * * * *', sendReminders, {
     timezone: 'Africa/Johannesburg'
   })
   console.log('Reminder service started — checking every hour')
-
-  // Run once on startup to catch any missed reminders
-  sendReminders()
 }
 
 module.exports = { startReminderService }
