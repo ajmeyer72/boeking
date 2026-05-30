@@ -6,9 +6,8 @@ const pool = new Pool({
 })
 
 const checkAvailability = async (restaurantId, date, time, partySize) => {
-  // Get restaurant settings
   const settings = await pool.query(
-    `SELECT max_covers_per_slot, slot_duration_mins, max_party_size, 
+    `SELECT max_covers_per_slot, slot_duration_mins, max_party_size,
             min_notice_hours, booking_window_days
      FROM restaurant_settings
      WHERE restaurant_id = $1`,
@@ -74,8 +73,13 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
   const available = bookedCovers + partySize <= max_covers_per_slot
 
   if (!available) {
-    // Find alternative slots
-    const alternatives = await findAlternativeSlots(restaurantId, date, time, partySize, max_covers_per_slot)
+    const alternatives = await findAlternativeSlots(
+      restaurantId,
+      date,
+      time,
+      partySize,
+      max_covers_per_slot
+    )
     return {
       available: false,
       reason: 'fully_booked',
@@ -91,7 +95,6 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
 }
 
 const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize, maxCovers) => {
-  // Get all bookings for that day
   const dayBookings = await pool.query(
     `SELECT reservation_time, SUM(party_size) as booked_covers
      FROM reservations
@@ -107,13 +110,10 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     bookedByTime[row.reservation_time.slice(0, 5)] = parseInt(row.booked_covers)
   })
 
-  // Generate time slots for the day
   const slots = generateTimeSlots()
-  const requestedHour = parseInt(requestedTime.split(':')[0])
-  const requestedMin = parseInt(requestedTime.split(':')[1] || 0)
-  const requestedMinutes = requestedHour * 60 + requestedMin
+  const [reqH, reqM] = requestedTime.split(':').map(Number)
+  const requestedMinutes = reqH * 60 + reqM
 
-  // Find available slots within 2 hours of requested time
   const alternatives = []
 
   for (const slot of slots) {
@@ -137,7 +137,6 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
 
 const generateTimeSlots = () => {
   const slots = []
-  // Generate slots from 11:00 to 22:00 in 30 minute intervals
   for (let h = 11; h <= 22; h++) {
     slots.push(`${h.toString().padStart(2, '0')}:00`)
     if (h < 22) slots.push(`${h.toString().padStart(2, '0')}:30`)
@@ -148,6 +147,8 @@ const generateTimeSlots = () => {
 const checkOperatingHours = async (restaurantId, date, time) => {
   const dayOfWeek = new Date(date).getDay()
 
+  console.log('Checking operating hours for day:', dayOfWeek, 'time:', time)
+
   const hours = await pool.query(
     `SELECT open_time, close_time, is_closed
      FROM operating_hours
@@ -156,21 +157,51 @@ const checkOperatingHours = async (restaurantId, date, time) => {
     [restaurantId, dayOfWeek]
   )
 
-  if (hours.rows.length === 0) return { open: true }
+  if (hours.rows.length === 0) {
+    console.log('No operating hours found for this day — assuming open')
+    return { open: true }
+  }
 
   const { open_time, close_time, is_closed } = hours.rows[0]
+
+  console.log('Operating hours:', { open_time, close_time, is_closed })
 
   if (is_closed) {
     return {
       open: false,
-      message: "Sorry, we're closed on that day."
+      message: "Sorry, we're closed on that day. Please choose another date."
     }
   }
 
-  if (time < open_time.slice(0, 5) || time > close_time.slice(0, 5)) {
+  // Convert times to minutes for reliable comparison
+  const toMinutes = (t) => {
+    const clean = t.slice(0, 5)
+    const [h, m] = clean.split(':').map(Number)
+    return h * 60 + m
+  }
+
+  const openMins = toMinutes(open_time)
+  const closeMins = toMinutes(close_time)
+  const requestMins = toMinutes(time)
+
+  // Last booking is 1 hour before closing
+  const lastBookingMins = closeMins - 60
+
+  console.log('Time comparison (minutes):', {
+    open: openMins,
+    close: closeMins,
+    lastBooking: lastBookingMins,
+    requested: requestMins
+  })
+
+  if (requestMins < openMins || requestMins > lastBookingMins) {
+    const closeHour = Math.floor(lastBookingMins / 60)
+    const closeMin = lastBookingMins % 60
+    const lastBookingTime = `${closeHour.toString().padStart(2, '0')}:${closeMin.toString().padStart(2, '0')}`
+
     return {
       open: false,
-      message: `Sorry, we're only open between ${open_time.slice(0, 5)} and ${close_time.slice(0, 5)} on that day.`
+      message: `Sorry, our last booking is at ${lastBookingTime}. We're open from ${open_time.slice(0, 5)} to ${close_time.slice(0, 5)}. Please choose an earlier time.`
     }
   }
 
