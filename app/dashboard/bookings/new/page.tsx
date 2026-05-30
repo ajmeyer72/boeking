@@ -81,7 +81,6 @@ export default function NewBookingPage() {
 
       setSuccess(`Booking confirmed! ${form.customer_name} is booked for ${form.reservation_date} at ${form.reservation_time}.`)
 
-      // Reset form
       setForm({
         customer_name: '',
         whatsapp_number: '',
@@ -99,7 +98,6 @@ export default function NewBookingPage() {
     }
   }
 
-  // Generate time slots
   const timeSlots = []
   for (let h = 11; h <= 21; h++) {
     timeSlots.push(`${h.toString().padStart(2, '0')}:00`)
@@ -109,7 +107,6 @@ export default function NewBookingPage() {
   return (
     <div className="max-w-2xl mx-auto">
 
-      {/* Header */}
       <div className="flex items-center gap-4 mb-10">
         <Link
           href="/dashboard"
@@ -162,7 +159,7 @@ export default function NewBookingPage() {
                 onChange={handleChange}
                 required
                 placeholder="e.g. Sarah Johnson"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
+                className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
               />
             </div>
 
@@ -177,7 +174,7 @@ export default function NewBookingPage() {
                 onChange={handleChange}
                 required
                 placeholder="e.g. 27821234567"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
+                className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
               />
               <p className="text-gray-600 text-xs mt-1">
                 Include country code without + e.g. 27821234567
@@ -216,11 +213,12 @@ export default function NewBookingPage() {
                   value={form.reservation_time}
                   onChange={handleChange}
                   required
-                  
-                >className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
-                  <option value="">Select time</option>
+                  style={{ backgroundColor: '#0B0F14', color: 'white' }}
+                  className="w-full border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500/50 transition"
+                >
+                  <option value="" style={{ backgroundColor: '#0B0F14' }}>Select time</option>
                   {timeSlots.map(slot => (
-                    <option key={slot} value={slot}>{slot}</option>
+                    <option key={slot} value={slot} style={{ backgroundColor: '#0B0F14' }}>{slot}</option>
                   ))}
                 </select>
               </div>
@@ -235,11 +233,14 @@ export default function NewBookingPage() {
                 value={form.party_size}
                 onChange={handleChange}
                 required
-                className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
+                style={{ backgroundColor: '#0B0F14', color: 'white' }}
+                className="w-full border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500/50 transition"
               >
-                <option value="">Select party size</option>
+                <option value="" style={{ backgroundColor: '#0B0F14' }}>Select party size</option>
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-                  <option key={n} value={n}>{n} {n === 1 ? 'guest' : 'guests'}</option>
+                  <option key={n} value={n} style={{ backgroundColor: '#0B0F14' }}>
+                    {n} {n === 1 ? 'guest' : 'guests'}
+                  </option>
                 ))}
               </select>
             </div>
@@ -287,7 +288,7 @@ export default function NewBookingPage() {
                 onChange={handleChange}
                 rows={3}
                 placeholder="Allergies, special occasion, seating preference..."
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition resize-none"
+                className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition resize-none"
               />
             </div>
           </div>
