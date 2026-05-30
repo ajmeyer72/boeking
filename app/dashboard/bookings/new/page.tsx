@@ -216,8 +216,8 @@ export default function NewBookingPage() {
                   value={form.reservation_time}
                   onChange={handleChange}
                   required
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
-                >
+                  
+                >className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
                   <option value="">Select time</option>
                   {timeSlots.map(slot => (
                     <option key={slot} value={slot}>{slot}</option>
@@ -235,7 +235,7 @@ export default function NewBookingPage() {
                 value={form.party_size}
                 onChange={handleChange}
                 required
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
+                className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
               >
                 <option value="">Select party size</option>
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
