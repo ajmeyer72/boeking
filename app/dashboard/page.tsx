@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 interface Reservation {
   id: string
@@ -103,11 +104,24 @@ export default function DashboardPage() {
   return (
     <div>
       {/* Page header */}
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold mb-1">Dashboard</h1>
-        <p className="text-gray-500 text-sm">
-          {new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-        </p>
+      <div className="flex items-center justify-between mb-10">
+        <div>
+          <h1 className="text-3xl font-bold mb-1">Dashboard</h1>
+          <p className="text-gray-500 text-sm">
+            {new Date().toLocaleDateString('en-ZA', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric'
+            })}
+          </p>
+        </div>
+        <Link
+          href="/dashboard/bookings/new"
+          className="bg-green-500 hover:bg-green-400 text-black font-semibold px-5 py-3 rounded-xl transition text-sm"
+        >
+          + New booking
+        </Link>
       </div>
 
       {/* Stats */}

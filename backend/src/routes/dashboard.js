@@ -186,4 +186,129 @@ router.get('/customers', async (req, res) => {
   }
 })
 
+// GET /dashboard/availability — check slot availability
+router.get('/availability', async (req, res) => {
+  try {
+    const { date, time, party } = req.query
+    const restaurantId = req.user.restaurantId
+
+    if (!date || !time || !party) {
+      return res.status(400).json({ error: 'Date, time and party size are required' })
+    }
+
+    const { checkAvailability, checkOperatingHours, checkBlockedDate } = require('../services/availabilityService')
+
+    const blockedCheck = await checkBlockedDate(restaurantId, date)
+    if (blockedCheck.blocked) {
+      return res.json({ available: false, reason: blockedCheck.message })
+    }
+
+    const hoursCheck = await checkOperatingHours(restaurantId, date, time)
+    if (!hoursCheck.open) {
+      return res.json({ available: false, reason: hoursCheck.message })
+    }
+
+    const availability = await checkAvailability(restaurantId, date, time, parseInt(party))
+    if (!availability.available) {
+      return res.json({
+        available: false,
+        reason: availability.message,
+        alternatives: availability.alternatives || []
+      })
+    }
+
+    res.json({ available: true })
+  } catch (error) {
+    console.error('Availability check error:', error)
+    res.status(500).json({ error: 'Failed to check availability' })
+  }
+})
+
+// POST /dashboard/bookings — create manual booking
+router.post('/bookings', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const {
+      customer_name,
+      whatsapp_number,
+      reservation_date,
+      reservation_time,
+      party_size,
+      special_requests
+    } = req.body
+
+    if (!customer_name || !whatsapp_number || !reservation_date || !reservation_time || !party_size) {
+      return res.status(400).json({ error: 'All fields except special requests are required' })
+    }
+
+    // Clean phone number — remove spaces and ensure it starts with country code
+    const cleanPhone = whatsapp_number.replace(/\s/g, '').replace(/^\+/, '')
+
+    // Find or create customer
+    let customer = await pool.query(
+      `SELECT * FROM customers
+       WHERE whatsapp_number = $1
+       AND restaurant_id = $2`,
+      [cleanPhone, restaurantId]
+    )
+
+    if (customer.rows.length === 0) {
+      customer = await pool.query(
+        `INSERT INTO customers (restaurant_id, whatsapp_number, name)
+         VALUES ($1, $2, $3)
+         RETURNING *`,
+        [restaurantId, cleanPhone, customer_name]
+      )
+    } else {
+      // Update name if provided
+      await pool.query(
+        `UPDATE customers SET name = $1 WHERE id = $2`,
+        [customer_name, customer.rows[0].id]
+      )
+    }
+
+    const customerId = customer.rows[0].id
+
+    // Create reservation
+    const reservation = await pool.query(
+      `INSERT INTO reservations
+       (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')
+       RETURNING *`,
+      [
+        restaurantId,
+        customerId,
+        reservation_date,
+        reservation_time,
+        parseInt(party_size),
+        special_requests || null
+      ]
+    )
+
+    // Update customer total bookings
+    await pool.query(
+      `UPDATE customers SET total_bookings = total_bookings + 1 WHERE id = $1`,
+      [customerId]
+    )
+
+    // Schedule notifications
+    await pool.query(
+      `INSERT INTO notifications (reservation_id, type, status, scheduled_for)
+       VALUES 
+         ($1, 'reminder_24hr', 'pending', $2::date - INTERVAL '1 day'),
+         ($1, 'reminder_2hr', 'pending', $2::timestamp - INTERVAL '2 hours')`,
+      [reservation.rows[0].id, `${reservation_date}T${reservation_time}`]
+    )
+
+    res.json({
+      success: true,
+      reservation: reservation.rows[0],
+      message: `Booking confirmed for ${customer_name} on ${reservation_date} at ${reservation_time}`
+    })
+
+  } catch (error) {
+    console.error('Manual booking error:', error)
+    res.status(500).json({ error: 'Failed to create booking' })
+  }
+})
 module.exports = router
