@@ -203,7 +203,7 @@ export default function NewBookingPage() {
                   onChange={handleChange}
                   required
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
+                  className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
                 />
               </div>
 
