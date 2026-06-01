@@ -543,4 +543,73 @@ router.delete('/settings/blocked/:date', async (req, res) => {
     res.status(500).json({ error: 'Failed to remove blocked date' })
   }
 })
+// GET /dashboard/reservations/:id — get single reservation
+router.get('/reservations/:id', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    const result = await pool.query(
+      `SELECT r.*, c.name as customer_name, c.whatsapp_number
+       FROM reservations r
+       JOIN customers c ON c.id = r.customer_id
+       WHERE r.id = $1 AND r.restaurant_id = $2`,
+      [id, restaurantId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Reservation not found' })
+    }
+
+    res.json({ reservation: result.rows[0] })
+  } catch (error) {
+    console.error('Get reservation error:', error)
+    res.status(500).json({ error: 'Failed to fetch reservation' })
+  }
+})
+
+// PUT /dashboard/reservations/:id — update reservation
+router.put('/reservations/:id', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+    const {
+      reservation_date,
+      reservation_time,
+      party_size,
+      special_requests,
+      internal_notes
+    } = req.body
+
+    const result = await pool.query(
+      `UPDATE reservations
+       SET reservation_date = $1,
+           reservation_time = $2,
+           party_size = $3,
+           special_requests = $4,
+           internal_notes = $5,
+           updated_at = NOW()
+       WHERE id = $6 AND restaurant_id = $7
+       RETURNING *`,
+      [
+        reservation_date,
+        reservation_time,
+        parseInt(party_size),
+        special_requests || null,
+        internal_notes || null,
+        id,
+        restaurantId
+      ]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Reservation not found' })
+    }
+
+    res.json({ reservation: result.rows[0] })
+  } catch (error) {
+    console.error('Update reservation error:', error)
+    res.status(500).json({ error: 'Failed to update reservation' })
+  }
+})
 module.exports = router
