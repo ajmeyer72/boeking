@@ -101,6 +101,7 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     [restaurantId]
   )
   const slotDuration = settings.rows[0]?.slot_duration_mins || 90
+  console.log('Using slot duration for alternatives:', slotDuration, 'minutes')
 
   const dayBookings = await pool.query(
     `SELECT reservation_time, SUM(party_size) as booked_covers
