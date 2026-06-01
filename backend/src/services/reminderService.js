@@ -69,6 +69,19 @@ const sendReminders = async () => {
       await logNotification(reservation.id, 'reminder_2hr')
       console.log(`2hr reminder sent to ${reservation.whatsapp_number}`)
     }
+    
+  // Mark past confirmed reservations as completed
+    const completed = await pool.query(
+      `UPDATE reservations
+       SET status = 'completed', updated_at = NOW()
+       WHERE status = 'confirmed'
+       AND reservation_date < CURRENT_DATE
+       RETURNING id`
+    )
+
+    if (completed.rows.length > 0) {
+      console.log(`Marked ${completed.rows.length} reservation(s) as completed`)
+    }
 
   } catch (error) {
     console.error('Reminder service error:', error)
