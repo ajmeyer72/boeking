@@ -1,11 +1,14 @@
 const express = require('express')
 const router = express.Router()
 const messageHandler = require('../services/messageHandler')
+const { Pool } = require('pg')
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+})
 
 console.log('messageHandler exports:', Object.keys(messageHandler))
-
-// Deduplication store
-const processedMessages = new Set()
 
 // Meta webhook verification
 router.get('/', (req, res) => {
@@ -35,17 +38,18 @@ router.post('/', async (req, res) => {
       const text = message.text?.body
       const messageId = message.id
 
-      // Ignore duplicate messages
-      if (processedMessages.has(messageId)) {
+      // Deduplicate using database
+      try {
+        await pool.query(
+          `INSERT INTO processed_messages (message_id, processed_at)
+           VALUES ($1, NOW())`,
+          [messageId]
+        )
+      } catch (err) {
+        // Duplicate key error means already processed
         console.log('Duplicate message ignored:', messageId)
         return res.status(200).send('OK')
       }
-
-      // Mark message as processed
-      processedMessages.add(messageId)
-
-      // Clean up after 5 minutes
-      setTimeout(() => processedMessages.delete(messageId), 5 * 60 * 1000)
 
       if (text) {
         await messageHandler.handleIncomingMessage(from, text)

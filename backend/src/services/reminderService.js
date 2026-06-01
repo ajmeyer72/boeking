@@ -71,7 +71,7 @@ const sendReminders = async () => {
       console.log(`2hr reminder sent to ${reservation.whatsapp_number}`)
     }
 
-  // Mark past confirmed reservations as completed
+    // Mark past confirmed reservations as completed
     const completed = await pool.query(
       `UPDATE reservations
        SET status = 'completed', updated_at = NOW()
@@ -83,10 +83,17 @@ const sendReminders = async () => {
     if (completed.rows.length > 0) {
       console.log(`Marked ${completed.rows.length} reservation(s) as completed`)
     }
-// Check for expired waiting list offers
+
+    // Check for expired waiting list offers
     await expireWaitingListOffers()
     console.log('Waiting list expiry check complete')
-    
+
+    // Clean up old processed messages
+    await pool.query(
+      `DELETE FROM processed_messages WHERE processed_at < NOW() - INTERVAL '24 hours'`
+    )
+    console.log('Processed messages cleanup complete')
+
   } catch (error) {
     console.error('Reminder service error:', error)
   }
