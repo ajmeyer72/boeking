@@ -1,4 +1,5 @@
-console.log('availabilityService loaded — v2 with slot duration fix')
+console.log('availabilityService loaded — v3')
+
 const { Pool } = require('pg')
 
 const pool = new Pool({
@@ -6,7 +7,15 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
+const toMinutes = (timeStr) => {
+  const clean = timeStr.toString().slice(0, 5)
+  const [h, m] = clean.split(':').map(Number)
+  return h * 60 + m
+}
+
 const checkAvailability = async (restaurantId, date, time, partySize) => {
+  console.log('checkAvailability v3 called for:', date, time, partySize)
+
   const settings = await pool.query(
     `SELECT max_covers_per_slot, slot_duration_mins, max_party_size,
             min_notice_hours, booking_window_days
@@ -23,8 +32,11 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
     max_covers_per_slot,
     max_party_size,
     min_notice_hours,
-    booking_window_days
+    booking_window_days,
+    slot_duration_mins
   } = settings.rows[0]
+
+  console.log('Settings loaded:', { max_covers_per_slot, slot_duration_mins, max_party_size })
 
   // Check party size limit
   if (partySize > max_party_size) {
@@ -73,13 +85,16 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
   const bookedCovers = parseInt(booked.rows[0].booked_covers)
   const available = bookedCovers + partySize <= max_covers_per_slot
 
+  console.log('Availability check:', { bookedCovers, partySize, max_covers_per_slot, available })
+
   if (!available) {
     const alternatives = await findAlternativeSlots(
       restaurantId,
       date,
       time,
       partySize,
-      max_covers_per_slot
+      max_covers_per_slot,
+      slot_duration_mins
     )
     return {
       available: false,
@@ -95,14 +110,15 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
   }
 }
 
-const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize, maxCovers) => {
-  // Get slot duration from settings
-  const settings = await pool.query(
-    `SELECT slot_duration_mins, max_covers_per_slot FROM restaurant_settings WHERE restaurant_id = $1`,
-    [restaurantId]
-  )
-  const slotDuration = settings.rows[0]?.slot_duration_mins || 90
-  const maxCoversPerSlot = settings.rows[0]?.max_covers_per_slot || maxCovers
+const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize, maxCovers, slotDuration) => {
+  // Use passed slot duration or fetch from settings
+  if (!slotDuration) {
+    const settings = await pool.query(
+      `SELECT slot_duration_mins FROM restaurant_settings WHERE restaurant_id = $1`,
+      [restaurantId]
+    )
+    slotDuration = settings.rows[0]?.slot_duration_mins || 90
+  }
 
   console.log('Using slot duration for alternatives:', slotDuration, 'minutes')
 
@@ -123,6 +139,8 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     bookedByTime[row.reservation_time.slice(0, 5)] = parseInt(row.booked_covers)
   })
 
+  console.log('Booked slots for the day:', bookedByTime)
+
   // Get operating hours for this day
   const dayOfWeek = new Date(date).getDay()
   const hours = await pool.query(
@@ -131,30 +149,33 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     [restaurantId, dayOfWeek]
   )
 
-  if (hours.rows.length === 0) return []
+  if (hours.rows.length === 0) {
+    console.log('No operating hours found — returning empty alternatives')
+    return []
+  }
 
   const openMins = toMinutes(hours.rows[0].open_time)
   const closeMins = toMinutes(hours.rows[0].close_time)
-  const lastBookingMins = closeMins - 60 // last booking 1hr before close
+  const lastBookingMins = closeMins - 60
+
+  console.log('Operating window (minutes):', { openMins, closeMins, lastBookingMins })
 
   // Convert requested time to minutes
-  const [reqH, reqM] = requestedTime.split(':').map(Number)
-  const requestedMins = reqH * 60 + reqM
+  const requestedMins = toMinutes(requestedTime)
 
   // Check if a given slot overlaps with any fully booked slot
   const isSlotAvailable = (slotMins) => {
     const slotEnd = slotMins + slotDuration
 
     for (const [timeStr, bookedCovers] of Object.entries(bookedByTime)) {
-      if (bookedCovers + partySize <= maxCoversPerSlot) continue // not fully booked
+      if (bookedCovers + partySize <= maxCovers) continue
 
-      const [bH, bM] = timeStr.split(':').map(Number)
-      const bookedStart = bH * 60 + bM
+      const bookedStart = toMinutes(timeStr)
       const bookedEnd = bookedStart + slotDuration
 
-      // Check overlap — two slots overlap if one starts before the other ends
       if (slotMins < bookedEnd && slotEnd > bookedStart) {
-        return false // overlaps with a fully booked slot
+        console.log(`Slot ${slotMins} overlaps with booked slot at ${bookedStart}`)
+        return false
       }
     }
 
@@ -168,15 +189,13 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
   while (slotMins <= lastBookingMins) {
     const diff = Math.abs(slotMins - requestedMins)
 
-    // Skip the requested slot itself
-    if (slotMins !== requestedMins) {
-      // Only suggest slots within 3 slot-durations of requested time
-      if (diff <= slotDuration * 3) {
-        if (isSlotAvailable(slotMins)) {
-          const h = Math.floor(slotMins / 60)
-          const m = slotMins % 60
-          alternatives.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`)
-        }
+    if (slotMins !== requestedMins && diff <= slotDuration * 3) {
+      if (isSlotAvailable(slotMins)) {
+        const h = Math.floor(slotMins / 60)
+        const m = slotMins % 60
+        const slot = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+        console.log('Alternative slot found:', slot)
+        alternatives.push(slot)
       }
     }
 
@@ -184,13 +203,8 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     if (alternatives.length >= 3) break
   }
 
+  console.log('Final alternatives:', alternatives)
   return alternatives
-}
-
-const toMinutes = (timeStr) => {
-  const clean = timeStr.toString().slice(0, 5)
-  const [h, m] = clean.split(':').map(Number)
-  return h * 60 + m
 }
 
 const generateTimeSlots = (slotDuration = 90) => {
@@ -240,8 +254,6 @@ const checkOperatingHours = async (restaurantId, date, time) => {
   const openMins = toMinutes(open_time)
   const closeMins = toMinutes(close_time)
   const requestMins = toMinutes(time)
-
-  // Last booking is 1 hour before closing
   const lastBookingMins = closeMins - 60
 
   console.log('Time comparison (minutes):', {
