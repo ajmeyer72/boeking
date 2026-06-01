@@ -156,13 +156,14 @@ router.patch('/reservations/:id/noshow', async (req, res) => {
   }
 })
 
-// GET /dashboard/customers — customer list
+// GET /dashboard/customers — customer list with full stats
 router.get('/customers', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
+    const { search } = req.query
 
-    const result = await pool.query(
-      `SELECT 
+    let query = `
+      SELECT 
         c.id,
         c.name,
         c.whatsapp_number,
@@ -170,19 +171,59 @@ router.get('/customers', async (req, res) => {
         c.total_bookings,
         c.no_shows,
         c.created_at,
-        MAX(r.reservation_date) as last_booking
+        COUNT(r.id) FILTER (WHERE r.status = 'confirmed') as upcoming_bookings,
+        MAX(r.reservation_date) FILTER (WHERE r.status = 'completed' OR r.reservation_date < CURRENT_DATE) as last_visit,
+        MIN(r.reservation_date) FILTER (WHERE r.status = 'confirmed' AND r.reservation_date >= CURRENT_DATE) as next_booking
        FROM customers c
-       LEFT JOIN reservations r ON r.customer_id = c.id AND r.status = 'confirmed'
-       WHERE c.restaurant_id = $1
-       GROUP BY c.id
-       ORDER BY c.total_bookings DESC`,
-      [restaurantId]
-    )
+       LEFT JOIN reservations r ON r.customer_id = c.id
+       WHERE c.restaurant_id = $1`
 
+    const params: any[] = [restaurantId]
+
+    if (search) {
+      query += ` AND (c.name ILIKE $2 OR c.whatsapp_number ILIKE $2)`
+      params.push(`%${search}%`)
+    }
+
+    query += ` GROUP BY c.id ORDER BY c.total_bookings DESC, c.created_at DESC`
+
+    const result = await pool.query(query, params)
     res.json({ customers: result.rows })
   } catch (error) {
     console.error('Customers error:', error)
     res.status(500).json({ error: 'Failed to fetch customers' })
+  }
+})
+
+// GET /dashboard/customers/:id — single customer with booking history
+router.get('/customers/:id', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    const customer = await pool.query(
+      `SELECT * FROM customers WHERE id = $1 AND restaurant_id = $2`,
+      [id, restaurantId]
+    )
+
+    if (customer.rows.length === 0) {
+      return res.status(404).json({ error: 'Customer not found' })
+    }
+
+    const reservations = await pool.query(
+      `SELECT * FROM reservations 
+       WHERE customer_id = $1
+       ORDER BY reservation_date DESC, reservation_time DESC`,
+      [id]
+    )
+
+    res.json({
+      customer: customer.rows[0],
+      reservations: reservations.rows
+    })
+  } catch (error) {
+    console.error('Customer detail error:', error)
+    res.status(500).json({ error: 'Failed to fetch customer' })
   }
 })
 
