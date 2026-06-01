@@ -197,7 +197,7 @@ export default function SettingsPage() {
     ))
   }
 
-  const timeOptions = []
+  const timeOptions: string[] = []
   for (let h = 7; h <= 24; h++) {
     timeOptions.push(`${h.toString().padStart(2, '0')}:00`)
     if (h < 24) timeOptions.push(`${h.toString().padStart(2, '0')}:30`)
