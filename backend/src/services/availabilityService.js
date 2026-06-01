@@ -97,12 +97,15 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
 const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize, maxCovers) => {
   // Get slot duration from settings
   const settings = await pool.query(
-    `SELECT slot_duration_mins FROM restaurant_settings WHERE restaurant_id = $1`,
+    `SELECT slot_duration_mins, max_covers_per_slot FROM restaurant_settings WHERE restaurant_id = $1`,
     [restaurantId]
   )
   const slotDuration = settings.rows[0]?.slot_duration_mins || 90
+  const maxCoversPerSlot = settings.rows[0]?.max_covers_per_slot || maxCovers
+
   console.log('Using slot duration for alternatives:', slotDuration, 'minutes')
 
+  // Get all bookings for the day
   const dayBookings = await pool.query(
     `SELECT reservation_time, SUM(party_size) as booked_covers
      FROM reservations
@@ -113,39 +116,84 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     [restaurantId, date]
   )
 
+  // Build a map of booked covers per time slot
   const bookedByTime = {}
   dayBookings.rows.forEach(row => {
     bookedByTime[row.reservation_time.slice(0, 5)] = parseInt(row.booked_covers)
   })
 
-  const slots = generateTimeSlots(slotDuration)
+  // Get operating hours for this day
+  const dayOfWeek = new Date(date).getDay()
+  const hours = await pool.query(
+    `SELECT open_time, close_time FROM operating_hours
+     WHERE restaurant_id = $1 AND day_of_week = $2 AND is_closed = false`,
+    [restaurantId, dayOfWeek]
+  )
+
+  if (hours.rows.length === 0) return []
+
+  const openMins = toMinutes(hours.rows[0].open_time)
+  const closeMins = toMinutes(hours.rows[0].close_time)
+  const lastBookingMins = closeMins - 60 // last booking 1hr before close
+
+  // Convert requested time to minutes
   const [reqH, reqM] = requestedTime.split(':').map(Number)
-  const requestedMinutes = reqH * 60 + reqM
+  const requestedMins = reqH * 60 + reqM
 
-  const alternatives = []
+  // Check if a given slot overlaps with any fully booked slot
+  const isSlotAvailable = (slotMins) => {
+    const slotEnd = slotMins + slotDuration
 
-  for (const slot of slots) {
-    const [h, m] = slot.split(':').map(Number)
-    const slotMinutes = h * 60 + m
-    const diff = Math.abs(slotMinutes - requestedMinutes)
+    for (const [timeStr, bookedCovers] of Object.entries(bookedByTime)) {
+      if (bookedCovers + partySize <= maxCoversPerSlot) continue // not fully booked
 
-    if (diff === 0) continue
-    if (diff > slotDuration * 3) continue
+      const [bH, bM] = timeStr.split(':').map(Number)
+      const bookedStart = bH * 60 + bM
+      const bookedEnd = bookedStart + slotDuration
 
-    const booked = bookedByTime[slot] || 0
-    if (booked + partySize <= maxCovers) {
-      alternatives.push(slot)
+      // Check overlap — two slots overlap if one starts before the other ends
+      if (slotMins < bookedEnd && slotEnd > bookedStart) {
+        return false // overlaps with a fully booked slot
+      }
     }
 
+    return true
+  }
+
+  // Generate all valid slots based on slot duration
+  const alternatives = []
+  let slotMins = openMins
+
+  while (slotMins <= lastBookingMins) {
+    const diff = Math.abs(slotMins - requestedMins)
+
+    // Skip the requested slot itself
+    if (slotMins !== requestedMins) {
+      // Only suggest slots within 3 slot-durations of requested time
+      if (diff <= slotDuration * 3) {
+        if (isSlotAvailable(slotMins)) {
+          const h = Math.floor(slotMins / 60)
+          const m = slotMins % 60
+          alternatives.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`)
+        }
+      }
+    }
+
+    slotMins += slotDuration
     if (alternatives.length >= 3) break
   }
 
   return alternatives
 }
 
+const toMinutes = (timeStr) => {
+  const clean = timeStr.toString().slice(0, 5)
+  const [h, m] = clean.split(':').map(Number)
+  return h * 60 + m
+}
+
 const generateTimeSlots = (slotDuration = 90) => {
   const slots = []
-  // Start at 11:00, end at 22:00, increment by slot duration
   let minutes = 11 * 60
   const endMinutes = 22 * 60
 
@@ -186,13 +234,6 @@ const checkOperatingHours = async (restaurantId, date, time) => {
       open: false,
       message: "Sorry, we're closed on that day. Please choose another date."
     }
-  }
-
-  // Convert times to minutes for reliable comparison
-  const toMinutes = (t) => {
-    const clean = t.slice(0, 5)
-    const [h, m] = clean.split(':').map(Number)
-    return h * 60 + m
   }
 
   const openMins = toMinutes(open_time)
