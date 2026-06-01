@@ -95,6 +95,13 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
 }
 
 const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize, maxCovers) => {
+  // Get slot duration from settings
+  const settings = await pool.query(
+    `SELECT slot_duration_mins FROM restaurant_settings WHERE restaurant_id = $1`,
+    [restaurantId]
+  )
+  const slotDuration = settings.rows[0]?.slot_duration_mins || 90
+
   const dayBookings = await pool.query(
     `SELECT reservation_time, SUM(party_size) as booked_covers
      FROM reservations
@@ -110,7 +117,7 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     bookedByTime[row.reservation_time.slice(0, 5)] = parseInt(row.booked_covers)
   })
 
-  const slots = generateTimeSlots()
+  const slots = generateTimeSlots(slotDuration)
   const [reqH, reqM] = requestedTime.split(':').map(Number)
   const requestedMinutes = reqH * 60 + reqM
 
@@ -122,7 +129,7 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     const diff = Math.abs(slotMinutes - requestedMinutes)
 
     if (diff === 0) continue
-    if (diff > 120) continue
+    if (diff > slotDuration * 3) continue
 
     const booked = bookedByTime[slot] || 0
     if (booked + partySize <= maxCovers) {
@@ -135,12 +142,19 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
   return alternatives
 }
 
-const generateTimeSlots = () => {
+const generateTimeSlots = (slotDuration = 90) => {
   const slots = []
-  for (let h = 11; h <= 22; h++) {
-    slots.push(`${h.toString().padStart(2, '0')}:00`)
-    if (h < 22) slots.push(`${h.toString().padStart(2, '0')}:30`)
+  // Start at 11:00, end at 22:00, increment by slot duration
+  let minutes = 11 * 60
+  const endMinutes = 22 * 60
+
+  while (minutes <= endMinutes) {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`)
+    minutes += slotDuration
   }
+
   return slots
 }
 
