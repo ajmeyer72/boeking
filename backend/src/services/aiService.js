@@ -41,6 +41,7 @@ const getToneInstructions = (tone) => {
 }
 
 const getSystemPrompt = (settings = {}, availabilityContext = '', existingBookingContext = '') => {
+  const now = new Date()
   const today = new Date().toLocaleDateString('en-ZA', {
     weekday: 'long',
     year: 'numeric',
@@ -48,7 +49,17 @@ const getSystemPrompt = (settings = {}, availabilityContext = '', existingBookin
     day: 'numeric',
     timeZone: 'Africa/Johannesburg'
   })
-
+// Pre-calculate next 14 days so Claude has accurate day names
+const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const upcomingDates = []
+for (let i = 1; i <= 14; i++) {
+  const d = new Date(now)
+  d.setDate(d.getDate() + i)
+  const dateStr = d.toISOString().split('T')[0]
+  const dayName = dayNames[d.getDay()]
+  upcomingDates.push(`${dateStr} = ${dayName} ${d.getDate()} ${d.toLocaleDateString('en-ZA', { month: 'long' })}`)
+}
+const dateReference = upcomingDates.join('\n')
   const restaurantName = settings.restaurant_display_name || settings.restaurant_name || 'our restaurant'
   const tone = getToneInstructions(settings.bot_tone)
   const greeting = settings.greeting_message
@@ -58,6 +69,8 @@ const getSystemPrompt = (settings = {}, availabilityContext = '', existingBookin
   return `You are a reservation assistant for ${restaurantName}, handling table bookings via WhatsApp.
 
 Today's date is ${today}. Use this to correctly interpret relative dates like "next Monday" or "this Sunday".
+IMPORTANT DATE REFERENCE — use these exact day names, do not calculate yourself:
+${dateReference}
 
 TONE: ${tone}
 
