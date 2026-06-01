@@ -295,24 +295,32 @@ export default function CustomersPage() {
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
               {customerHistory.map(reservation => (
-                <div
-                  key={reservation.id}
-                  className="bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="text-sm font-medium">
-                      {formatDate(reservation.reservation_date)} · {formatTime(reservation.reservation_time)}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {reservation.party_size} {reservation.party_size === 1 ? 'guest' : 'guests'}
-                      {reservation.special_requests && ` · ${reservation.special_requests}`}
-                    </div>
-                  </div>
-                  <div>
-                    {getStatusBadge(reservation.status)}
-                  </div>
-                </div>
-              ))}
+  <div
+    key={reservation.id}
+    className="bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3 flex items-center justify-between"
+  >
+    <div>
+      <div className="text-sm font-medium">
+        {formatDate(reservation.reservation_date)} · {formatTime(reservation.reservation_time)}
+      </div>
+      <div className="text-xs text-gray-500 mt-0.5">
+        {reservation.party_size} {reservation.party_size === 1 ? 'guest' : 'guests'}
+        {reservation.special_requests && ` · ${reservation.special_requests}`}
+      </div>
+    </div>
+    <div className="flex items-center gap-2">
+      {getStatusBadge(reservation.status)}
+      {reservation.status === 'confirmed' && (
+        <Link
+          href={`/dashboard/bookings/${reservation.id}/edit`}
+          className="text-xs px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition"
+        >
+          Edit
+        </Link>
+      )}
+    </div>
+  </div>
+))}
             </div>
           )}
         </div>
