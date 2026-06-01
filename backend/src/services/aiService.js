@@ -9,7 +9,38 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-const getSystemPrompt = (availabilityContext = '', existingBookingContext = '') => {
+const getRestaurantSettings = async (restaurantId) => {
+  const result = await pool.query(
+    `SELECT 
+      r.name as restaurant_name,
+      rs.greeting_message,
+      rs.restaurant_display_name,
+      rs.bot_tone,
+      rs.max_party_size,
+      rs.min_notice_hours,
+      rs.booking_window_days,
+      rs.max_covers_per_slot,
+      rs.slot_duration_mins
+     FROM restaurants r
+     LEFT JOIN restaurant_settings rs ON rs.restaurant_id = r.id
+     WHERE r.id = $1`,
+    [restaurantId]
+  )
+  return result.rows[0] || {}
+}
+
+const getToneInstructions = (tone) => {
+  switch (tone) {
+    case 'formal':
+      return 'You communicate in a professional and polished manner. Use proper greetings, avoid contractions, and maintain a refined tone throughout.'
+    case 'casual':
+      return 'You communicate in a relaxed and conversational way. Keep things light, friendly and approachable — like chatting with a friend.'
+    default:
+      return 'You communicate in a warm and friendly manner. Be approachable, helpful and personable without being overly formal.'
+  }
+}
+
+const getSystemPrompt = (settings = {}, availabilityContext = '', existingBookingContext = '') => {
   const today = new Date().toLocaleDateString('en-ZA', {
     weekday: 'long',
     year: 'numeric',
@@ -18,13 +49,23 @@ const getSystemPrompt = (availabilityContext = '', existingBookingContext = '') 
     timeZone: 'Africa/Johannesburg'
   })
 
-  return `You are a friendly and professional restaurant reservation assistant for a restaurant using the Boeking platform.
+  const restaurantName = settings.restaurant_display_name || settings.restaurant_name || 'our restaurant'
+  const tone = getToneInstructions(settings.bot_tone)
+  const greeting = settings.greeting_message
+    ? `Your opening greeting when a new customer messages: "${settings.greeting_message}"`
+    : `Greet new customers warmly and introduce yourself as the reservation assistant for ${restaurantName}.`
+
+  return `You are a reservation assistant for ${restaurantName}, handling table bookings via WhatsApp.
 
 Today's date is ${today}. Use this to correctly interpret relative dates like "next Monday" or "this Sunday".
 
-Your job is to help customers make, modify or cancel table reservations via WhatsApp.
+TONE: ${tone}
+
+GREETING: ${greeting}
 
 ${existingBookingContext}
+
+Your job is to help customers make, modify or cancel table reservations.
 
 If there is no existing booking, collect the following in a natural conversational way:
 1. Preferred date (always confirm the actual calendar date e.g. "Just to confirm, that's Monday 2 June 2026 — correct?")
@@ -38,7 +79,7 @@ ${availabilityContext}
 Once you have all details and availability is confirmed, summarise and ask for confirmation.
 
 Rules:
-- Be warm, friendly and concise - this is WhatsApp, not email
+- Be concise — this is WhatsApp, not email
 - Ask one question at a time
 - Never ask for information the customer has already provided
 - Always confirm the actual calendar date when customer uses relative terms
@@ -53,9 +94,8 @@ CANCELLATION HANDLING:
 
 MODIFICATION HANDLING:
 - If the customer wants to modify, collect the new details
-- Before confirming, you MUST check availability by including a CHECK_AVAILABILITY tag
+- Before confirming, include a CHECK_AVAILABILITY tag
 - Format: CHECK_AVAILABILITY: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>
-- Wait for availability confirmation before proceeding
 
 When the customer confirms a new booking or modification, you MUST end your reply with this exact tag on a new line:
 BOOKING_CONFIRMED: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>, name=<full name>, requests=<details or none>
@@ -94,6 +134,14 @@ const processWithAI = async (userMessage, conversation) => {
   const history = await getConversationHistory(conversation.id)
   const messages = history.length > 0 ? history : [{ role: 'user', content: userMessage }]
 
+  // Load restaurant settings
+  const settings = await getRestaurantSettings(conversation.restaurant_id)
+  console.log('Restaurant settings loaded:', {
+    name: settings.restaurant_display_name || settings.restaurant_name,
+    tone: settings.bot_tone,
+    hasGreeting: !!settings.greeting_message
+  })
+
   // Build existing booking context
   let existingBookingContext = ''
   const contextData = conversation.context_data || {}
@@ -108,14 +156,11 @@ const processWithAI = async (userMessage, conversation) => {
 Greet them by name and show these details. Ask if they want to modify, cancel, or make a new booking.`
   }
 
-  // First pass — get Claude's response
-  let availabilityContext = ''
-  const systemPrompt = getSystemPrompt(availabilityContext, existingBookingContext)
-
+  // First pass
   let response = await client.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 1000,
-    system: systemPrompt,
+    system: getSystemPrompt(settings, '', existingBookingContext),
     messages,
   })
 
@@ -130,12 +175,10 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
 
     let availabilityResult = ''
 
-    // Check blocked dates
     const blockedCheck = await checkBlockedDate(conversation.restaurant_id, availabilityRequest.date)
     if (blockedCheck.blocked) {
       availabilityResult = `AVAILABILITY RESULT: Not available — ${blockedCheck.message}`
     } else {
-      // Check operating hours
       const hoursCheck = await checkOperatingHours(
         conversation.restaurant_id,
         availabilityRequest.date,
@@ -145,7 +188,6 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
       if (!hoursCheck.open) {
         availabilityResult = `AVAILABILITY RESULT: Not available — ${hoursCheck.message}`
       } else {
-        // Check capacity
         const availability = await checkAvailability(
           conversation.restaurant_id,
           availabilityRequest.date,
@@ -167,7 +209,7 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
 
     console.log('Availability result:', availabilityResult)
 
-    // Second pass — send availability result back to Claude
+    // Second pass with availability result
     const messagesWithAvailability = [
       ...messages,
       { role: 'assistant', content: reply },
@@ -177,7 +219,7 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
     response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 1000,
-      system: getSystemPrompt(availabilityResult, existingBookingContext),
+      system: getSystemPrompt(settings, availabilityResult, existingBookingContext),
       messages: messagesWithAvailability,
     })
 
