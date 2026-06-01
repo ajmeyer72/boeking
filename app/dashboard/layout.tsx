@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function DashboardLayout({
   children,
@@ -21,7 +22,6 @@ export default function DashboardLayout({
       return
     }
 
-    // Verify token is still valid
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/verify`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` }
@@ -65,11 +65,20 @@ export default function DashboardLayout({
             <div className="w-8 h-8 rounded-lg bg-green-500 flex items-center justify-center text-black font-bold">
               b
             </div>
-            <span className="font-semibold">boeking</span>
+            <Link href="/dashboard" className="font-semibold hover:text-green-400 transition">
+              boeking
+            </Link>
             <span className="text-gray-600">·</span>
             <span className="text-gray-400 text-sm">{user?.restaurantName}</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              href="/dashboard/settings"
+              className="text-sm text-gray-500 hover:text-white transition"
+            >
+              Settings
+            </Link>
+            <span className="text-gray-600">·</span>
             <span className="text-gray-500 text-sm">{user?.name}</span>
             <button
               onClick={handleLogout}
