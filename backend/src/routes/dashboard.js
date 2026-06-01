@@ -311,4 +311,49 @@ router.post('/bookings', async (req, res) => {
     res.status(500).json({ error: 'Failed to create booking' })
   }
 })
+// GET /dashboard/calendar?month=2026-06 — bookings for a full month
+router.get('/calendar', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { month } = req.query
+
+    // Default to current month if not provided
+    const monthDate = month ? new Date(`${month}-01`) : new Date()
+    const year = monthDate.getFullYear()
+    const monthNum = monthDate.getMonth() + 1
+
+    const result = await pool.query(
+      `SELECT 
+        r.id,
+        r.reservation_date,
+        r.reservation_time,
+        r.party_size,
+        r.status,
+        r.special_requests,
+        c.name as customer_name,
+        c.whatsapp_number
+       FROM reservations r
+       JOIN customers c ON c.id = r.customer_id
+       WHERE r.restaurant_id = $1
+       AND EXTRACT(YEAR FROM r.reservation_date) = $2
+       AND EXTRACT(MONTH FROM r.reservation_date) = $3
+       AND r.status = 'confirmed'
+       ORDER BY r.reservation_date ASC, r.reservation_time ASC`,
+      [restaurantId, year, monthNum]
+    )
+
+    // Group by date
+    const grouped = {}
+    result.rows.forEach(row => {
+      const date = row.reservation_date.toISOString().split('T')[0]
+      if (!grouped[date]) grouped[date] = []
+      grouped[date].push(row)
+    })
+
+    res.json({ bookings: grouped })
+  } catch (error) {
+    console.error('Calendar error:', error)
+    res.status(500).json({ error: 'Failed to fetch calendar data' })
+  }
+})
 module.exports = router
