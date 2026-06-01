@@ -117,7 +117,6 @@ export default function DashboardPage() {
     timeZone: 'Africa/Johannesburg'
   })
 
-  // Calendar helpers
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -140,7 +139,6 @@ export default function DashboardPage() {
 
   const selectedBookings = selectedDate ? (calendarBookings[selectedDate] || []) : []
 
-  // Group bookings by time slot
   const groupByTime = (bookings: Reservation[]) => {
     const grouped: Record<string, Reservation[]> = {}
     bookings.forEach(b => {
@@ -246,8 +244,6 @@ export default function DashboardPage() {
 
           {/* Calendar */}
           <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6">
-
-            {/* Month navigation */}
             <div className="flex items-center justify-between mb-6">
               <button
                 onClick={() => {
@@ -276,7 +272,6 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            {/* Day headers */}
             <div className="grid grid-cols-7 mb-2">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
                 <div key={day} className="text-center text-xs text-gray-600 font-medium py-1">
@@ -285,19 +280,16 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            {/* Calendar grid */}
             {calendarLoading ? (
               <div className="flex items-center justify-center h-48 text-gray-600 text-sm">
                 Loading...
               </div>
             ) : (
               <div className="grid grid-cols-7 gap-1">
-                {/* Empty cells for first day offset */}
                 {Array.from({ length: getDaysInMonth(calendarMonth).firstDay }).map((_, i) => (
                   <div key={`empty-${i}`} />
                 ))}
 
-                {/* Day cells */}
                 {Array.from({ length: getDaysInMonth(calendarMonth).daysInMonth }).map((_, i) => {
                   const day = i + 1
                   const dateStr = getDateString(
@@ -341,7 +333,6 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Legend */}
             <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5">
               <div className="flex items-center gap-2 text-xs text-gray-600">
                 <div className="w-3 h-3 rounded bg-white/5" />
@@ -395,7 +386,6 @@ export default function DashboardPage() {
                       .sort(([a], [b]) => a.localeCompare(b))
                       .map(([time, timeBookings]) => (
                         <div key={time}>
-                          {/* Time slot header */}
                           <div className="flex items-center gap-3 mb-2">
                             <span className="text-green-400 font-mono font-medium text-sm">
                               {time}
@@ -406,40 +396,47 @@ export default function DashboardPage() {
                             </span>
                           </div>
 
-                          {/* Bookings at this time */}
                           <div className="space-y-2 ml-2">
                             {timeBookings.map(booking => (
                               <div
                                 key={booking.id}
-                                className="bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 flex items-center justify-between"
+                                className="bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3"
                               >
-                                <div>
-                                  <div className="font-medium text-sm">
-                                    {booking.customer_name || 'Unknown'}
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-medium text-sm">
+                                      {booking.customer_name || 'Unknown'}
+                                    </div>
+                                    <div className="text-gray-500 text-xs mt-0.5 flex items-center gap-2">
+                                      <span>{booking.party_size} {booking.party_size === 1 ? 'guest' : 'guests'}</span>
+                                      {booking.special_requests && (
+                                        <>
+                                          <span>·</span>
+                                          <span className="truncate max-w-[140px]">{booking.special_requests}</span>
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="text-gray-500 text-xs mt-0.5 flex items-center gap-2">
-                                    <span>{booking.party_size} {booking.party_size === 1 ? 'guest' : 'guests'}</span>
-                                    {booking.special_requests && (
-                                      <>
-                                        <span>·</span>
-                                        <span className="truncate max-w-[140px]">{booking.special_requests}</span>
-                                      </>
-                                    )}
+                                  <div className="flex gap-2 ml-4 flex-shrink-0">
+                                    <Link
+                                      href={`/dashboard/bookings/${booking.id}/edit`}
+                                      className="text-xs px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition"
+                                    >
+                                      Edit
+                                    </Link>
+                                    <button
+                                      onClick={() => handleNoShow(booking.id)}
+                                      className="text-xs px-2 py-1 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 transition"
+                                    >
+                                      No show
+                                    </button>
+                                    <button
+                                      onClick={() => handleCancel(booking.id)}
+                                      className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition"
+                                    >
+                                      Cancel
+                                    </button>
                                   </div>
-                                </div>
-                                <div className="flex gap-2 ml-4 flex-shrink-0">
-                                  <button
-                                    onClick={() => handleNoShow(booking.id)}
-                                    className="text-xs px-2 py-1 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 transition"
-                                  >
-                                    No show
-                                  </button>
-                                  <button
-                                    onClick={() => handleCancel(booking.id)}
-                                    className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition"
-                                  >
-                                    Cancel
-                                  </button>
                                 </div>
                               </div>
                             ))}
@@ -512,6 +509,12 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex gap-2">
+                          <Link
+                            href={`/dashboard/bookings/${booking.id}/edit`}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition"
+                          >
+                            Edit
+                          </Link>
                           <button
                             onClick={() => handleNoShow(booking.id)}
                             className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 transition"
