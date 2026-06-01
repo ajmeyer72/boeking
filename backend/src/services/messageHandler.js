@@ -1,3 +1,4 @@
+const { addToWaitingList, handleWaitingListResponse } = require('./waitingListService')
 const { sendMessage } = require('./metaService')
 const { processWithAI } = require('./aiService')
 const { Pool } = require('pg')
@@ -205,6 +206,18 @@ const handleIncomingMessage = async (from, text) => {
     const conversation = await getOrCreateConversation(from)
     console.log('Conversation retrieved:', conversation.id)
 
+    // Check if this is a waiting list response before anything else
+    const waitingListResponse = await handleWaitingListResponse(
+      from,
+      text,
+      conversation.restaurant_id
+    )
+
+    if (waitingListResponse?.handled) {
+      await sendMessage(from, waitingListResponse.reply)
+      return
+    }
+
     await saveMessage(conversation.id, 'inbound', text)
 
     const { reply, newState, rawReply } = await processWithAI(text, conversation)
@@ -224,6 +237,29 @@ const handleIncomingMessage = async (from, text) => {
       const cancelled = await cancelReservation(conversation.customer_id)
       if (cancelled) {
         console.log('Reservation cancelled successfully')
+        // Notify waiting list for that slot
+        const { notifyWaitingList } = require('./waitingListService')
+        await notifyWaitingList(
+          conversation.restaurant_id,
+          cancelled.reservation_date,
+          cancelled.reservation_time,
+          cancelled.party_size
+        )
+      }
+    }
+
+    // Handle waiting list addition
+    if (rawReply && rawReply.includes('ADD_TO_WAITLIST:')) {
+      const match = rawReply.match(/ADD_TO_WAITLIST:\s*date=([^,]+),\s*time=([^,]+),\s*party=([^,]+)(?:,\s*requests=(.+))?/i)
+      if (match) {
+        await addToWaitingList(
+          conversation,
+          match[1].trim(),
+          match[2].trim(),
+          parseInt(match[3].trim()),
+          match[4]?.trim() || null
+        )
+        console.log('Customer added to waiting list')
       }
     }
 

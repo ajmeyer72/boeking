@@ -117,7 +117,17 @@ router.patch('/reservations/:id/cancel', async (req, res) => {
       return res.status(404).json({ error: 'Reservation not found' })
     }
 
-    res.json({ reservation: result.rows[0] })
+    // Notify waiting list
+    const { notifyWaitingList } = require('../services/waitingListService')
+    const cancelled = result.rows[0]
+    await notifyWaitingList(
+      restaurantId,
+      cancelled.reservation_date,
+      cancelled.reservation_time,
+      cancelled.party_size
+    )
+
+    res.json({ reservation: cancelled })
   } catch (error) {
     console.error('Cancel reservation error:', error)
     res.status(500).json({ error: 'Failed to cancel reservation' })

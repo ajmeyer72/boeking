@@ -1,6 +1,7 @@
 const cron = require('node-cron')
 const { Pool } = require('pg')
 const { sendMessage } = require('./metaService')
+const { expireWaitingListOffers } = require('./waitingListService')
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -69,7 +70,7 @@ const sendReminders = async () => {
       await logNotification(reservation.id, 'reminder_2hr')
       console.log(`2hr reminder sent to ${reservation.whatsapp_number}`)
     }
-    
+
   // Mark past confirmed reservations as completed
     const completed = await pool.query(
       `UPDATE reservations
@@ -82,7 +83,10 @@ const sendReminders = async () => {
     if (completed.rows.length > 0) {
       console.log(`Marked ${completed.rows.length} reservation(s) as completed`)
     }
-
+// Check for expired waiting list offers
+    await expireWaitingListOffers()
+    console.log('Waiting list expiry check complete')
+    
   } catch (error) {
     console.error('Reminder service error:', error)
   }

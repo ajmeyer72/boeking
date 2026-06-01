@@ -91,6 +91,12 @@ Rules:
 CANCELLATION HANDLING:
 - If the customer wants to cancel, confirm their booking details and ask them to confirm the cancellation
 - Once they confirm, send a warm message and end with BOOKING_CANCELLED on a new line
+WAITING LIST HANDLING:
+- If a slot is fully booked, offer to add the customer to the waiting list
+- Ask: "We're fully booked at that time. Would you like to be added to the waiting list? If a spot opens up we'll message you straight away."
+- If they say yes, collect any missing details (date, time, party size) then end your reply with:
+ADD_TO_WAITLIST: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>, requests=<details or none>
+- Confirm to the customer they've been added: "You're on the waiting list for [date] at [time]. We'll be in touch if a table becomes available! 🤞"
 
 MODIFICATION HANDLING:
 - If the customer wants to modify, collect the new details
@@ -235,10 +241,11 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
   }
 
   const cleanReply = reply
-    .replace(/\nCHECK_AVAILABILITY:.*$/m, '')
-    .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
-    .replace(/\nBOOKING_CANCELLED.*$/s, '')
-    .trim()
+  .replace(/\nCHECK_AVAILABILITY:.*$/m, '')
+  .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
+  .replace(/\nBOOKING_CANCELLED.*$/s, '')
+  .replace(/\nADD_TO_WAITLIST:.*$/s, '')
+  .trim()
 
   return { reply: cleanReply, newState, rawReply: reply }
 }
