@@ -178,7 +178,7 @@ router.get('/customers', async (req, res) => {
        LEFT JOIN reservations r ON r.customer_id = c.id
        WHERE c.restaurant_id = $1`
 
-    const params: any[] = [restaurantId]
+    const params = [restaurantId]
 
     if (search) {
       query += ` AND (c.name ILIKE $2 OR c.whatsapp_number ILIKE $2)`
