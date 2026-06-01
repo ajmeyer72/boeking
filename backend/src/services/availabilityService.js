@@ -1,3 +1,4 @@
+console.log('availabilityService loaded — v2 with slot duration fix')
 const { Pool } = require('pg')
 
 const pool = new Pool({
