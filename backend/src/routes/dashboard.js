@@ -356,4 +356,150 @@ router.get('/calendar', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch calendar data' })
   }
 })
+// GET /dashboard/settings — get all restaurant settings
+router.get('/settings', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+
+    const [restaurant, settings, hours, blocked] = await Promise.all([
+      pool.query(
+        `SELECT * FROM restaurants WHERE id = $1`,
+        [restaurantId]
+      ),
+      pool.query(
+        `SELECT * FROM restaurant_settings WHERE restaurant_id = $1`,
+        [restaurantId]
+      ),
+      pool.query(
+        `SELECT * FROM operating_hours WHERE restaurant_id = $1 ORDER BY day_of_week ASC`,
+        [restaurantId]
+      ),
+      pool.query(
+        `SELECT * FROM blocked_dates WHERE restaurant_id = $1 AND blocked_date >= CURRENT_DATE ORDER BY blocked_date ASC`,
+        [restaurantId]
+      )
+    ])
+
+    res.json({
+      restaurant: restaurant.rows[0],
+      settings: settings.rows[0],
+      hours: hours.rows,
+      blocked: blocked.rows
+    })
+  } catch (error) {
+    console.error('Settings fetch error:', error)
+    res.status(500).json({ error: 'Failed to fetch settings' })
+  }
+})
+
+// PUT /dashboard/settings/hours — update operating hours
+router.put('/settings/hours', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { hours } = req.body
+
+    // Delete existing hours and reinsert
+    await pool.query(
+      `DELETE FROM operating_hours WHERE restaurant_id = $1`,
+      [restaurantId]
+    )
+
+    for (const hour of hours) {
+      await pool.query(
+        `INSERT INTO operating_hours (restaurant_id, day_of_week, open_time, close_time, is_closed)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [restaurantId, hour.day_of_week, hour.open_time, hour.close_time, hour.is_closed]
+      )
+    }
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Hours update error:', error)
+    res.status(500).json({ error: 'Failed to update operating hours' })
+  }
+})
+
+// PUT /dashboard/settings/config — update booking config
+router.put('/settings/config', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const {
+      slot_duration_mins,
+      max_covers_per_slot,
+      max_party_size,
+      min_notice_hours,
+      booking_window_days,
+      greeting_message,
+      restaurant_display_name,
+      bot_tone
+    } = req.body
+
+    await pool.query(
+      `UPDATE restaurant_settings SET
+        slot_duration_mins = $1,
+        max_covers_per_slot = $2,
+        max_party_size = $3,
+        min_notice_hours = $4,
+        booking_window_days = $5,
+        greeting_message = $6,
+        restaurant_display_name = $7,
+        bot_tone = $8
+       WHERE restaurant_id = $9`,
+      [
+        slot_duration_mins,
+        max_covers_per_slot,
+        max_party_size,
+        min_notice_hours,
+        booking_window_days,
+        greeting_message,
+        restaurant_display_name,
+        bot_tone,
+        restaurantId
+      ]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Config update error:', error)
+    res.status(500).json({ error: 'Failed to update settings' })
+  }
+})
+
+// POST /dashboard/settings/blocked — add a blocked date
+router.post('/settings/blocked', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { date, reason } = req.body
+
+    await pool.query(
+      `INSERT INTO blocked_dates (restaurant_id, blocked_date, reason)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [restaurantId, date, reason || null]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Blocked date error:', error)
+    res.status(500).json({ error: 'Failed to add blocked date' })
+  }
+})
+
+// DELETE /dashboard/settings/blocked/:date — remove a blocked date
+router.delete('/settings/blocked/:date', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { date } = req.params
+
+    await pool.query(
+      `DELETE FROM blocked_dates WHERE restaurant_id = $1 AND blocked_date = $2`,
+      [restaurantId, date]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Delete blocked date error:', error)
+    res.status(500).json({ error: 'Failed to remove blocked date' })
+  }
+})
 module.exports = router
