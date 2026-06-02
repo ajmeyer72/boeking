@@ -1,4 +1,4 @@
-console.log('availabilityService loaded — v3')
+console.log('availabilityService loaded — v4')
 
 const { Pool } = require('pg')
 
