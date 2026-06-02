@@ -73,6 +73,13 @@ export default function DashboardLayout({
           </div>
           <div className="flex items-center gap-4">
             <Link
+              href="/dashboard/waitinglist"
+              className="text-sm text-gray-500 hover:text-white transition"
+            >
+              Waiting list
+            </Link>
+            <span className="text-gray-600">·</span>
+            <Link
               href="/dashboard/customers"
               className="text-sm text-gray-500 hover:text-white transition"
             >
