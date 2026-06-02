@@ -622,4 +622,136 @@ router.put('/reservations/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to update reservation' })
   }
 })
+// GET /dashboard/waitinglist — all active waiting list entries
+router.get('/waitinglist', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+
+    const result = await pool.query(
+      `SELECT 
+        w.id,
+        w.requested_date,
+        w.requested_time,
+        w.party_size,
+        w.status,
+        w.special_requests,
+        w.created_at,
+        w.offered_at,
+        w.expires_at,
+        c.name as customer_name,
+        c.whatsapp_number
+       FROM waiting_list w
+       JOIN customers c ON c.id = w.customer_id
+       WHERE w.restaurant_id = $1
+       AND w.status IN ('waiting', 'offered')
+       AND w.requested_date >= CURRENT_DATE
+       ORDER BY w.requested_date ASC, w.requested_time ASC, w.created_at ASC`,
+      [restaurantId]
+    )
+
+    res.json({ waitingList: result.rows })
+  } catch (error) {
+    console.error('Waiting list error:', error)
+    res.status(500).json({ error: 'Failed to fetch waiting list' })
+  }
+})
+
+// DELETE /dashboard/waitinglist/:id — remove from waiting list
+router.delete('/waitinglist/:id', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    await pool.query(
+      `UPDATE waiting_list SET status = 'declined'
+       WHERE id = $1 AND restaurant_id = $2`,
+      [id, restaurantId]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Remove waiting list error:', error)
+    res.status(500).json({ error: 'Failed to remove from waiting list' })
+  }
+})
+
+// POST /dashboard/waitinglist/:id/notify — manually notify waiting list customer
+router.post('/waitinglist/:id/notify', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    const entry = await pool.query(
+      `SELECT w.*, c.whatsapp_number, c.name as customer_name
+       FROM waiting_list w
+       JOIN customers c ON c.id = w.customer_id
+       WHERE w.id = $1 AND w.restaurant_id = $2`,
+      [id, restaurantId]
+    )
+
+    if (entry.rows.length === 0) {
+      return res.status(404).json({ error: 'Entry not found' })
+    }
+
+    const { notifyWaitingList } = require('../services/waitingListService')
+    await notifyWaitingList(
+      restaurantId,
+      entry.rows[0].requested_date,
+      entry.rows[0].requested_time,
+      entry.rows[0].party_size
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Notify waiting list error:', error)
+    res.status(500).json({ error: 'Failed to notify customer' })
+  }
+})
+
+// POST /dashboard/waitinglist/:id/confirm — convert waiting list to booking
+router.post('/waitinglist/:id/confirm', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    const entry = await pool.query(
+      `SELECT w.*, c.whatsapp_number
+       FROM waiting_list w
+       JOIN customers c ON c.id = w.customer_id
+       WHERE w.id = $1 AND w.restaurant_id = $2`,
+      [id, restaurantId]
+    )
+
+    if (entry.rows.length === 0) {
+      return res.status(404).json({ error: 'Entry not found' })
+    }
+
+    const w = entry.rows[0]
+
+    // Create reservation
+    await pool.query(
+      `INSERT INTO reservations
+       (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')`,
+      [restaurantId, w.customer_id, w.requested_date, w.requested_time, w.party_size, w.special_requests]
+    )
+
+    // Update waiting list status
+    await pool.query(
+      `UPDATE waiting_list SET status = 'confirmed' WHERE id = $1`,
+      [id]
+    )
+
+    // Update customer total bookings
+    await pool.query(
+      `UPDATE customers SET total_bookings = total_bookings + 1 WHERE id = $1`,
+      [w.customer_id]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Confirm waiting list error:', error)
+    res.status(500).json({ error: 'Failed to confirm booking' })
+  }
+})
 module.exports = router
