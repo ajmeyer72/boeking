@@ -182,24 +182,45 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     return true
   }
 
-  // Generate all valid slots based on slot duration
+  // Generate slots radiating out from requested time in both directions
   const alternatives = []
-  let slotMins = openMins
+  const checkedSlots = new Set()
 
-  while (slotMins <= lastBookingMins) {
-    const diff = Math.abs(slotMins - requestedMins)
+  // Generate candidate slots — go backwards and forwards from requested time
+  const candidateSlots = []
 
-    if (slotMins !== requestedMins && diff <= slotDuration * 3) {
-      if (isSlotAvailable(slotMins)) {
-        const h = Math.floor(slotMins / 60)
-        const m = slotMins % 60
-        const slot = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
-        console.log('Alternative slot found:', slot)
-        alternatives.push(slot)
-      }
+  // Forward slots from requested time
+  let forwardMins = requestedMins + slotDuration
+  while (forwardMins <= lastBookingMins) {
+    candidateSlots.push({ mins: forwardMins, diff: forwardMins - requestedMins })
+    forwardMins += slotDuration
+  }
+
+  // Backward slots from requested time
+  let backwardMins = requestedMins - slotDuration
+  while (backwardMins >= openMins) {
+    candidateSlots.push({ mins: backwardMins, diff: requestedMins - backwardMins })
+    backwardMins -= slotDuration
+  }
+
+  // Sort by closest to requested time
+  candidateSlots.sort((a, b) => a.diff - b.diff)
+
+  for (const { mins } of candidateSlots) {
+    if (checkedSlots.has(mins)) continue
+    checkedSlots.add(mins)
+
+    if (mins < openMins || mins > lastBookingMins) continue
+    if (mins === requestedMins) continue
+
+    if (isSlotAvailable(mins)) {
+      const h = Math.floor(mins / 60)
+      const m = mins % 60
+      const slot = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`
+      console.log('Alternative slot found:', slot)
+      alternatives.push(slot)
     }
 
-    slotMins += slotDuration
     if (alternatives.length >= 3) break
   }
 
