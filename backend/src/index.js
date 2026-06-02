@@ -43,6 +43,8 @@ app.use((req, res, next) => {
 app.use('/webhook', webhookRoutes)
 app.use('/auth', authRoutes)
 app.use('/dashboard', dashboardRoutes)
+const adminRoutes = require('./routes/admin')
+app.use('/admin', adminRoutes)
 
 app.get('/health', (req, res) => {
   res.json({ status: 'Boeking backend is running' })
