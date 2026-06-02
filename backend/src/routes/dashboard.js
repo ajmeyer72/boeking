@@ -754,4 +754,66 @@ router.post('/waitinglist/:id/confirm', async (req, res) => {
     res.status(500).json({ error: 'Failed to confirm booking' })
   }
 })
+// GET /dashboard/dayview?date=2026-06-04 — bookings and waiting list for a specific day
+router.get('/dayview', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { date } = req.query
+
+    if (!date) {
+      return res.status(400).json({ error: 'Date is required' })
+    }
+
+    const [reservations, waitingList] = await Promise.all([
+      pool.query(
+        `SELECT 
+          r.id,
+          r.reservation_date,
+          r.reservation_time,
+          r.party_size,
+          r.status,
+          r.special_requests,
+          r.internal_notes,
+          c.name as customer_name,
+          c.whatsapp_number
+         FROM reservations r
+         JOIN customers c ON c.id = r.customer_id
+         WHERE r.restaurant_id = $1
+         AND r.reservation_date = $2
+         AND r.status = 'confirmed'
+         ORDER BY r.reservation_time ASC`,
+        [restaurantId, date]
+      ),
+      pool.query(
+        `SELECT 
+          w.id,
+          w.requested_date,
+          w.requested_time,
+          w.party_size,
+          w.status,
+          w.special_requests,
+          w.created_at,
+          w.offered_at,
+          w.expires_at,
+          c.name as customer_name,
+          c.whatsapp_number
+         FROM waiting_list w
+         JOIN customers c ON c.id = w.customer_id
+         WHERE w.restaurant_id = $1
+         AND w.requested_date = $2
+         AND w.status IN ('waiting', 'offered')
+         ORDER BY w.requested_time ASC, w.created_at ASC`,
+        [restaurantId, date]
+      )
+    ])
+
+    res.json({
+      reservations: reservations.rows,
+      waitingList: waitingList.rows
+    })
+  } catch (error) {
+    console.error('Day view error:', error)
+    res.status(500).json({ error: 'Failed to fetch day view' })
+  }
+})
 module.exports = router

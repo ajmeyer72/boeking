@@ -100,12 +100,16 @@ export default function WaitingListPage() {
     }
   }
 
-  const formatDate = (date: string) => new Date(date + 'T12:00:00').toLocaleDateString('en-ZA', {
-    weekday: 'short',
+  const formatDate = (date: string) => {
+  const clean = date.toString().split('T')[0]
+  return new Date(clean + 'T12:00:00').toLocaleDateString('en-ZA', {
+    weekday: 'long',
     day: 'numeric',
-    month: 'short',
+    month: 'long',
+    year: 'numeric',
     timeZone: 'Africa/Johannesburg'
   })
+}
 
   const formatTime = (time: string) => time.slice(0, 5)
 
