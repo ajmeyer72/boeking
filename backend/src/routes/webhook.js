@@ -33,10 +33,15 @@ router.post('/', async (req, res) => {
       body.object === 'whatsapp_business_account' &&
       body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]
     ) {
-      const message = body.entry[0].changes[0].value.messages[0]
+      const value = body.entry[0].changes[0].value
+      const message = value.messages[0]
       const from = message.from
       const text = message.text?.body
       const messageId = message.id
+
+      // Get the Meta Phone Number ID that received the message
+      const metaPhoneNumberId = value.metadata?.phone_number_id
+      console.log(`Message from ${from} to phone_number_id: ${metaPhoneNumberId}`)
 
       // Deduplicate using database
       try {
@@ -46,13 +51,12 @@ router.post('/', async (req, res) => {
           [messageId]
         )
       } catch (err) {
-        // Duplicate key error means already processed
         console.log('Duplicate message ignored:', messageId)
         return res.status(200).send('OK')
       }
 
-      if (text) {
-        await messageHandler.handleIncomingMessage(from, text)
+      if (text && metaPhoneNumberId) {
+        await messageHandler.handleIncomingMessage(from, text, metaPhoneNumberId)
       }
     }
 

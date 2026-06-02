@@ -8,7 +8,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-const getOrCreateConversation = async (from) => {
+const getOrCreateConversation = async (from, metaPhoneNumberId) => {
   const active = await pool.query(
     `SELECT c.*, cu.name as customer_name
      FROM conversations c
@@ -24,9 +24,18 @@ const getOrCreateConversation = async (from) => {
     return active.rows[0]
   }
 
+  // Look up restaurant by Meta Phone Number ID
   const restaurant = await pool.query(
-    `SELECT id FROM restaurants WHERE slug = 'test-restaurant' LIMIT 1`
+    `SELECT id FROM restaurants 
+     WHERE meta_phone_number_id = $1 AND is_active = true LIMIT 1`,
+    [metaPhoneNumberId]
   )
+
+  if (restaurant.rows.length === 0) {
+    console.error('No restaurant found for phone number ID:', metaPhoneNumberId)
+    throw new Error(`No restaurant found for phone number ID: ${metaPhoneNumberId}`)
+  }
+
   const restaurantId = restaurant.rows[0].id
 
   let customer = await pool.query(
@@ -199,11 +208,11 @@ const parseBookingDetails = (reply) => {
   return details
 }
 
-const handleIncomingMessage = async (from, text) => {
+const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
   try {
     console.log(`Message from ${from}: ${text}`)
 
-    const conversation = await getOrCreateConversation(from)
+    const conversation = await getOrCreateConversation(from, metaPhoneNumberId)
     console.log('Conversation retrieved:', conversation.id)
 
     // Check if this is a waiting list response before anything else
