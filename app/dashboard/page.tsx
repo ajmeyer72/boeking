@@ -10,7 +10,22 @@ interface Reservation {
   party_size: number
   status: string
   special_requests: string | null
+  internal_notes: string | null
   customer_name: string
+  whatsapp_number: string
+}
+
+interface WaitingEntry {
+  id: string
+  requested_date: string
+  requested_time: string
+  party_size: number
+  status: string
+  special_requests: string | null
+  created_at: string
+  offered_at: string | null
+  expires_at: string | null
+  customer_name: string | null
   whatsapp_number: string
 }
 
@@ -34,6 +49,11 @@ export default function DashboardPage() {
   const [calendarBookings, setCalendarBookings] = useState<Record<string, Reservation[]>>({})
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
+
+  // Day view state
+  const [dayReservations, setDayReservations] = useState<Reservation[]>([])
+  const [dayWaitingList, setDayWaitingList] = useState<WaitingEntry[]>([])
+  const [dayViewLoading, setDayViewLoading] = useState(false)
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('boeking_token') : null
   const base = process.env.NEXT_PUBLIC_API_URL
@@ -78,6 +98,22 @@ export default function DashboardPage() {
     }
   }
 
+  const fetchDayView = async (date: string) => {
+    setDayViewLoading(true)
+    try {
+      const res = await fetch(`${base}/dashboard/dayview?date=${date}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      setDayReservations(data.reservations || [])
+      setDayWaitingList(data.waitingList || [])
+    } catch (err) {
+      console.error('Failed to fetch day view:', err)
+    } finally {
+      setDayViewLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchData()
   }, [])
@@ -88,6 +124,12 @@ export default function DashboardPage() {
     }
   }, [activeTab, calendarMonth])
 
+  useEffect(() => {
+    if (selectedDate) {
+      fetchDayView(selectedDate)
+    }
+  }, [selectedDate])
+
   const handleCancel = async (id: string) => {
     if (!confirm('Are you sure you want to cancel this reservation?')) return
     await fetch(`${base}/dashboard/reservations/${id}/cancel`, {
@@ -95,6 +137,7 @@ export default function DashboardPage() {
       headers: { Authorization: `Bearer ${token}` }
     })
     fetchData()
+    if (selectedDate) fetchDayView(selectedDate)
     if (activeTab === 'calendar') fetchCalendar(calendarMonth)
   }
 
@@ -105,17 +148,62 @@ export default function DashboardPage() {
       headers: { Authorization: `Bearer ${token}` }
     })
     fetchData()
+    if (selectedDate) fetchDayView(selectedDate)
     if (activeTab === 'calendar') fetchCalendar(calendarMonth)
+  }
+
+  const handleWaitingConfirm = async (id: string) => {
+    if (!confirm('Convert this waiting list entry to a confirmed booking?')) return
+    await fetch(`${base}/dashboard/waitinglist/${id}/confirm`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (selectedDate) fetchDayView(selectedDate)
+    fetchCalendar(calendarMonth)
+    fetchData()
+  }
+
+  const handleWaitingRemove = async (id: string) => {
+    if (!confirm('Remove this customer from the waiting list?')) return
+    await fetch(`${base}/dashboard/waitinglist/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (selectedDate) fetchDayView(selectedDate)
+  }
+
+  const handleWaitingNotify = async (id: string) => {
+    await fetch(`${base}/dashboard/waitinglist/${id}/notify`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (selectedDate) fetchDayView(selectedDate)
   }
 
   const formatTime = (time: string) => time.slice(0, 5)
 
-  const formatDate = (date: string) => new Date(date).toLocaleDateString('en-ZA', {
+  const formatDate = (date: string) => new Date(date.split('T')[0] + 'T12:00:00').toLocaleDateString('en-ZA', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     timeZone: 'Africa/Johannesburg'
   })
+
+  const formatDateLong = (date: string) => new Date(date.split('T')[0] + 'T12:00:00').toLocaleDateString('en-ZA', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'Africa/Johannesburg'
+  })
+
+  const formatWaitingTime = (createdAt: string) => {
+    const diff = Date.now() - new Date(createdAt).getTime()
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    if (hours > 0) return `${hours}h ${mins}m ago`
+    return `${mins}m ago`
+  }
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
@@ -129,24 +217,26 @@ export default function DashboardPage() {
     return `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
   }
 
-  const isToday = (dateStr: string) => {
-    return dateStr === new Date().toISOString().split('T')[0]
-  }
+  const isToday = (dateStr: string) => dateStr === new Date().toISOString().split('T')[0]
+  const isPast = (dateStr: string) => dateStr < new Date().toISOString().split('T')[0]
 
-  const isPast = (dateStr: string) => {
-    return dateStr < new Date().toISOString().split('T')[0]
-  }
+  // Group by time slot
+  const groupByTime = (reservations: Reservation[], waiting: WaitingEntry[]) => {
+    const slots: Record<string, { reservations: Reservation[], waiting: WaitingEntry[] }> = {}
 
-  const selectedBookings = selectedDate ? (calendarBookings[selectedDate] || []) : []
-
-  const groupByTime = (bookings: Reservation[]) => {
-    const grouped: Record<string, Reservation[]> = {}
-    bookings.forEach(b => {
-      const time = formatTime(b.reservation_time)
-      if (!grouped[time]) grouped[time] = []
-      grouped[time].push(b)
+    reservations.forEach(r => {
+      const time = formatTime(r.reservation_time)
+      if (!slots[time]) slots[time] = { reservations: [], waiting: [] }
+      slots[time].reservations.push(r)
     })
-    return grouped
+
+    waiting.forEach(w => {
+      const time = formatTime(w.requested_time)
+      if (!slots[time]) slots[time] = { reservations: [], waiting: [] }
+      slots[time].waiting.push(w)
+    })
+
+    return slots
   }
 
   const bookings = activeTab === 'today' ? todayBookings : upcomingBookings
@@ -349,55 +439,57 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Day detail */}
+          {/* Day detail with bookings + waiting list */}
           <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6">
             {!selectedDate ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-16">
                 <div className="text-4xl mb-4">📅</div>
                 <div className="text-gray-400 font-medium">Select a date</div>
                 <div className="text-gray-600 text-sm mt-1">
-                  Click any date on the calendar to see bookings
+                  Click any date on the calendar to see bookings and waiting list
                 </div>
+              </div>
+            ) : dayViewLoading ? (
+              <div className="flex items-center justify-center h-48 text-gray-600 text-sm">
+                Loading...
               </div>
             ) : (
               <div>
                 <h3 className="font-semibold text-lg mb-1">
-                  {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-ZA', {
-                    weekday: 'long',
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric'
-                  })}
+                  {formatDateLong(selectedDate)}
                 </h3>
                 <p className="text-gray-500 text-sm mb-6">
-                  {selectedBookings.length === 0
-                    ? 'No bookings'
-                    : `${selectedBookings.length} booking${selectedBookings.length > 1 ? 's' : ''} · ${selectedBookings.reduce((sum, b) => sum + b.party_size, 0)} covers`
+                  {dayReservations.length === 0 && dayWaitingList.length === 0
+                    ? 'No bookings or waiting list entries'
+                    : `${dayReservations.length} booking${dayReservations.length !== 1 ? 's' : ''} · ${dayReservations.reduce((s, b) => s + b.party_size, 0)} covers${dayWaitingList.length > 0 ? ` · ${dayWaitingList.length} waiting` : ''}`
                   }
                 </p>
 
-                {selectedBookings.length === 0 ? (
+                {dayReservations.length === 0 && dayWaitingList.length === 0 ? (
                   <div className="text-center py-12 text-gray-600 text-sm">
                     No bookings for this date
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {Object.entries(groupByTime(selectedBookings))
+                  <div className="space-y-5 max-h-[560px] overflow-y-auto pr-1">
+                    {Object.entries(groupByTime(dayReservations, dayWaitingList))
                       .sort(([a], [b]) => a.localeCompare(b))
-                      .map(([time, timeBookings]) => (
+                      .map(([time, slot]) => (
                         <div key={time}>
+                          {/* Time slot header */}
                           <div className="flex items-center gap-3 mb-2">
                             <span className="text-green-400 font-mono font-medium text-sm">
                               {time}
                             </span>
                             <div className="flex-1 h-px bg-white/5" />
                             <span className="text-xs text-gray-600">
-                              {timeBookings.reduce((sum, b) => sum + b.party_size, 0)} covers
+                              {slot.reservations.reduce((s, b) => s + b.party_size, 0)} confirmed
+                              {slot.waiting.length > 0 && ` · ${slot.waiting.length} waiting`}
                             </span>
                           </div>
 
                           <div className="space-y-2 ml-2">
-                            {timeBookings.map(booking => (
+                            {/* Confirmed bookings */}
+                            {slot.reservations.map(booking => (
                               <div
                                 key={booking.id}
                                 className="bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3"
@@ -416,6 +508,11 @@ export default function DashboardPage() {
                                         </>
                                       )}
                                     </div>
+                                    {booking.internal_notes && (
+                                      <div className="text-xs text-yellow-400/70 mt-0.5">
+                                        📝 {booking.internal_notes}
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="flex gap-2 ml-4 flex-shrink-0">
                                     <Link
@@ -435,6 +532,60 @@ export default function DashboardPage() {
                                       className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition"
                                     >
                                       Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* Waiting list entries */}
+                            {slot.waiting.map(entry => (
+                              <div
+                                key={entry.id}
+                                className="bg-yellow-500/[0.03] border border-yellow-500/10 rounded-xl px-4 py-3"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="font-medium text-sm text-yellow-400/80">
+                                        {entry.customer_name || 'Unknown'}
+                                      </div>
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                                        {entry.status === 'offered' ? 'Offer sent' : 'Waiting'}
+                                      </span>
+                                    </div>
+                                    <div className="text-gray-500 text-xs mt-0.5 flex items-center gap-2">
+                                      <span>{entry.party_size} {entry.party_size === 1 ? 'guest' : 'guests'}</span>
+                                      <span>·</span>
+                                      <span>Added {formatWaitingTime(entry.created_at)}</span>
+                                      {entry.special_requests && (
+                                        <>
+                                          <span>·</span>
+                                          <span className="truncate max-w-[100px]">{entry.special_requests}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 ml-4 flex-shrink-0">
+                                    {entry.status === 'waiting' && (
+                                      <button
+                                        onClick={() => handleWaitingNotify(entry.id)}
+                                        className="text-xs px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition"
+                                      >
+                                        Notify
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleWaitingConfirm(entry.id)}
+                                      className="text-xs px-2 py-1 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 transition"
+                                    >
+                                      Confirm
+                                    </button>
+                                    <button
+                                      onClick={() => handleWaitingRemove(entry.id)}
+                                      className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition"
+                                    >
+                                      Remove
                                     </button>
                                   </div>
                                 </div>
