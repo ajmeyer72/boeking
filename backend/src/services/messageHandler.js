@@ -9,37 +9,45 @@ const pool = new Pool({
 })
 
 const getOrCreateConversation = async (from, metaPhoneNumberId) => {
-  const active = await pool.query(
-    `SELECT c.*, cu.name as customer_name, r.meta_phone_number_id
-     FROM conversations c
-     LEFT JOIN customers cu ON cu.id = c.customer_id
-     LEFT JOIN restaurants r ON r.id = c.restaurant_id
-     WHERE c.whatsapp_thread_id = $1
-     AND c.state = 'in_progress'
-     ORDER BY c.last_message_at DESC
-     LIMIT 1`,
-    [from]
-  )
+  // Look up restaurant first so we match conversation to correct restaurant
+const restaurant = await pool.query(
+  `SELECT id, meta_phone_number_id FROM restaurants 
+   WHERE meta_phone_number_id = $1 AND is_active = true LIMIT 1`,
+  [metaPhoneNumberId]
+)
+
+if (restaurant.rows.length === 0) {
+  console.error('No restaurant found for phone number ID:', metaPhoneNumberId)
+  throw new Error(`No restaurant found for phone number ID: ${metaPhoneNumberId}`)
+}
+
+const restaurantId = restaurant.rows[0].id
+const restaurantPhoneNumberId = restaurant.rows[0].meta_phone_number_id
+
+// Find active conversation for this customer AND this specific restaurant
+const active = await pool.query(
+  `SELECT c.*, cu.name as customer_name, r.meta_phone_number_id
+   FROM conversations c
+   LEFT JOIN customers cu ON cu.id = c.customer_id
+   LEFT JOIN restaurants r ON r.id = c.restaurant_id
+   WHERE c.whatsapp_thread_id = $1
+   AND c.restaurant_id = $2
+   AND c.state = 'in_progress'
+   ORDER BY c.last_message_at DESC
+   LIMIT 1`,
+  [from, restaurantId]
+)
+
+if (active.rows.length > 0) {
+  return active.rows[0]
+}
 
   if (active.rows.length > 0) {
     return active.rows[0]
   }
 
   // Look up restaurant by Meta Phone Number ID
-  const restaurant = await pool.query(
-    `SELECT id, meta_phone_number_id FROM restaurants 
-     WHERE meta_phone_number_id = $1 AND is_active = true LIMIT 1`,
-    [metaPhoneNumberId]
-  )
-
-  if (restaurant.rows.length === 0) {
-    console.error('No restaurant found for phone number ID:', metaPhoneNumberId)
-    throw new Error(`No restaurant found for phone number ID: ${metaPhoneNumberId}`)
-  }
-
-  const restaurantId = restaurant.rows[0].id
-  const restaurantPhoneNumberId = restaurant.rows[0].meta_phone_number_id
-
+  
   let customer = await pool.query(
     `SELECT * FROM customers
      WHERE whatsapp_number = $1
