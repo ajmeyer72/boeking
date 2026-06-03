@@ -416,7 +416,7 @@ export default function DashboardPage() {
                                       onClick={() => handleArrived(booking.id, !booking.arrived_at)}
                                       className={`text-xs px-2 py-1 rounded-lg border transition ${booking.arrived_at ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-white/5 text-gray-500 hover:text-green-400 border-white/10 hover:border-green-500/30'}`}
                                     >
-                                      {booking.arrived_at ? '&#10003;' : '?'}
+                                      {booking.arrived_at ? '✓' : '?'}
                                     </button>
                                     <Link href={`/dashboard/bookings/${booking.id}/edit`} className="text-xs px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition">
                                       Edit
@@ -511,7 +511,7 @@ export default function DashboardPage() {
                       <td className="px-6 py-4">
                         <div className="font-medium flex items-center gap-2">
                           {booking.customer_name || 'Unknown'}
-                          {booking.arrived_at && <span className="text-xs text-green-400">&#10003; Arrived</span>}
+                          {booking.arrived_at && <span className="text-xs text-green-400">✓ Arrived</span>}
                           {booking.late_notification_sent_at && !booking.arrived_at && <span className="text-xs text-yellow-400">&#9888; Late</span>}
                         </div>
                         <div className="text-gray-500 text-xs mt-0.5">+{booking.whatsapp_number}</div>
@@ -530,7 +530,7 @@ export default function DashboardPage() {
                             onClick={() => handleArrived(booking.id, !booking.arrived_at)}
                             className={`text-xs px-3 py-1.5 rounded-lg border transition ${booking.arrived_at ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-white/5 text-gray-500 hover:text-green-400 border-white/10 hover:border-green-500/30'}`}
                           >
-                            {booking.arrived_at ? '&#10003; Arrived' : 'Arrived?'}
+                            {booking.arrived_at ? '✓ Arrived' : 'Arrived?'}
                           </button>
                           <Link href={`/dashboard/bookings/${booking.id}/edit`} className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition">
                             Edit
