@@ -137,20 +137,7 @@ export default function BoekingLandingPage() {
         </div>
       </section>
 
-      {/* Trusted Section */}
-      <section className="border-y border-white/5 bg-white/[0.02]">
-        <div className="max-w-7xl mx-auto px-6 py-10 text-center">
-          <p className="text-gray-500 mb-8">
-            Do not fall behind — join our growing list of trusted restaurants
-          </p>
-          <div className="inline-flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-full px-6 py-3 text-green-400 text-sm font-medium">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            Now onboarding founding restaurants — 14-day free trial included
-          </div>
-        </div>
-      </section>
-
-      {/* How it Works */}
+            {/* How it Works */}
       <section id="how" className="max-w-7xl mx-auto px-6 py-28">
         <div className="text-center mb-16">
           <h2 className="text-5xl font-bold mb-4">How It Works</h2>
