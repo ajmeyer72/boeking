@@ -76,7 +76,14 @@ const notifyWaitingList = async (restaurantId, date, time, partySize) => {
   // Send notification
   const message = `Hi ${name}! 🎉 Good news — a table has just become available at the time you requested!\n\n📅 ${formattedDate}\n🕕 ${formattedTime}\n👥 ${entry.party_size} ${entry.party_size === 1 ? 'guest' : 'guests'}\n\nWould you like to confirm this booking? Reply *YES* to confirm or *NO* to decline.\n\nThis offer expires in 1 hour.`
 
-  await sendMessage(entry.whatsapp_number, message)
+// Get restaurant phone number ID
+  const restaurantResult = await pool.query(
+    `SELECT meta_phone_number_id FROM restaurants WHERE id = $1`,
+    [restaurantId]
+  )
+  const phoneNumberId = restaurantResult.rows[0]?.meta_phone_number_id
+
+  await sendMessage(entry.whatsapp_number, message, phoneNumberId)
 
   // Update status to offered with expiry
   await pool.query(

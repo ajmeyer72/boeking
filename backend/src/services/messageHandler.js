@@ -1,7 +1,7 @@
-const { addToWaitingList, handleWaitingListResponse } = require('./waitingListService')
 const { sendMessage } = require('./metaService')
 const { processWithAI } = require('./aiService')
 const { Pool } = require('pg')
+const { addToWaitingList, handleWaitingListResponse } = require('./waitingListService')
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -10,9 +10,10 @@ const pool = new Pool({
 
 const getOrCreateConversation = async (from, metaPhoneNumberId) => {
   const active = await pool.query(
-    `SELECT c.*, cu.name as customer_name
+    `SELECT c.*, cu.name as customer_name, r.meta_phone_number_id
      FROM conversations c
      LEFT JOIN customers cu ON cu.id = c.customer_id
+     LEFT JOIN restaurants r ON r.id = c.restaurant_id
      WHERE c.whatsapp_thread_id = $1
      AND c.state = 'in_progress'
      ORDER BY c.last_message_at DESC
@@ -26,7 +27,7 @@ const getOrCreateConversation = async (from, metaPhoneNumberId) => {
 
   // Look up restaurant by Meta Phone Number ID
   const restaurant = await pool.query(
-    `SELECT id FROM restaurants 
+    `SELECT id, meta_phone_number_id FROM restaurants 
      WHERE meta_phone_number_id = $1 AND is_active = true LIMIT 1`,
     [metaPhoneNumberId]
   )
@@ -37,6 +38,7 @@ const getOrCreateConversation = async (from, metaPhoneNumberId) => {
   }
 
   const restaurantId = restaurant.rows[0].id
+  const restaurantPhoneNumberId = restaurant.rows[0].meta_phone_number_id
 
   let customer = await pool.query(
     `SELECT * FROM customers
@@ -85,7 +87,8 @@ const getOrCreateConversation = async (from, metaPhoneNumberId) => {
 
   return {
     ...conversation.rows[0],
-    customer_name: customerName
+    customer_name: customerName,
+    meta_phone_number_id: restaurantPhoneNumberId
   }
 }
 
@@ -176,7 +179,6 @@ const cancelReservation = async (customerId) => {
   )
 
   if (result.rows.length > 0) {
-    // Log a cancellation notification
     await pool.query(
       `INSERT INTO notifications (reservation_id, type, status, scheduled_for, sent_at)
        VALUES ($1, 'cancellation', 'sent', NOW(), NOW())`,
@@ -215,7 +217,10 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
     const conversation = await getOrCreateConversation(from, metaPhoneNumberId)
     console.log('Conversation retrieved:', conversation.id)
 
-    // Check if this is a waiting list response before anything else
+    // Get the phone number ID to reply from
+    const replyFromId = conversation.meta_phone_number_id || metaPhoneNumberId
+
+    // Check if this is a waiting list response
     const waitingListResponse = await handleWaitingListResponse(
       from,
       text,
@@ -223,7 +228,7 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
     )
 
     if (waitingListResponse?.handled) {
-      await sendMessage(from, waitingListResponse.reply)
+      await sendMessage(from, waitingListResponse.reply, replyFromId)
       return
     }
 
@@ -246,7 +251,6 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
       const cancelled = await cancelReservation(conversation.customer_id)
       if (cancelled) {
         console.log('Reservation cancelled successfully')
-        // Notify waiting list for that slot
         const { notifyWaitingList } = require('./waitingListService')
         await notifyWaitingList(
           conversation.restaurant_id,
@@ -274,11 +278,11 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
 
     await updateConversationState(conversation.id, newState)
     await saveMessage(conversation.id, 'outbound', reply)
-    await sendMessage(from, reply)
+    await sendMessage(from, reply, replyFromId)
 
   } catch (error) {
     console.error('Error handling message:', error)
-    await sendMessage(from, 'Sorry, something went wrong. Please try again.')
+    await sendMessage(from, 'Sorry, something went wrong. Please try again.', metaPhoneNumberId)
   }
 }
 
