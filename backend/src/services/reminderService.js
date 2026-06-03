@@ -34,7 +34,7 @@ const sendReminders = async () => {
       const reminder1Hours = restaurant.reminder_1_hours || 24
       const reminder2Hours = restaurant.reminder_2_hours || 2
 
-      // First reminder — only send after 11am
+      // First reminder - only send after 11am
       if (parseInt(currentHour) >= 11) {
         const firstReminder = await pool.query(
           `SELECT r.*, c.whatsapp_number, c.name as customer_name
@@ -59,7 +59,7 @@ const sendReminders = async () => {
           console.log(`First reminder sent to ${reservation.whatsapp_number}`)
         }
       } else {
-        console.log(`Skipping first reminders — current hour is ${currentHour}:00, reminders start at 11:00`)
+        console.log(`Skipping first reminders - current hour is ${currentHour}:00, reminders start at 11:00`)
       }
 
       // Second reminder
@@ -135,22 +135,22 @@ const formatReminderMessage = (reservation, type) => {
   const requests = reservation.special_requests
 
   if (type === '24hr') {
-    return `Hi ${name}! 👋 Just a reminder that you have a table booked with us tomorrow.
+    return `Hi ${name}! Just a reminder that you have a table booked with us tomorrow.
 
-📅 ${date}
-🕕 ${time}
-👥 ${party} ${party === 1 ? 'guest' : 'guests'}${requests ? `\n✨ ${requests}` : ''}
+Date: ${date}
+Time: ${time}
+Guests: ${party} ${party === 1 ? 'guest' : 'guests'}${requests ? '\nSpecial requests: ' + requests : ''}
 
-We look forward to seeing you! If you need to make any changes, just reply to this message. 😊`
+We look forward to seeing you! If you need to make any changes, just reply to this message.`
   }
 
-  return `Hi ${name}! ⏰ Your table is coming up in about 2 hours!
+  return `Hi ${name}! Your table is coming up in about 2 hours!
 
-📅 ${date}
-🕕 ${time}
-👥 ${party} ${party === 1 ? 'guest' : 'guests'}${requests ? `\n✨ ${requests}` : ''}
+Date: ${date}
+Time: ${time}
+Guests: ${party} ${party === 1 ? 'guest' : 'guests'}${requests ? '\nSpecial requests: ' + requests : ''}
 
-See you soon! If you need to make any changes, just reply to this message. 😊`
+See you soon! If you need to make any changes, just reply to this message.`
 }
 
 const logNotification = async (reservationId, type) => {
@@ -165,7 +165,7 @@ const startReminderService = () => {
   cron.schedule('*/15 * * * *', sendReminders, {
     timezone: 'Africa/Johannesburg'
   })
-  console.log('Reminder service started — checking every 15 minutes')
+  console.log('Reminder service started - checking every 15 minutes')
 }
 
 module.exports = { startReminderService }
