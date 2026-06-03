@@ -235,6 +235,19 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
       conversation.restaurant_id
     )
 
+    // Check if this is a late notification response
+    const { handleLateResponse } = require('./lateNotificationService')
+    const lateResponse = await handleLateResponse(
+      from,
+      text,
+      conversation.restaurant_id
+    )
+
+    if (lateResponse?.handled) {
+      await sendMessage(from, lateResponse.reply, replyFromId)
+      return
+    }
+
     if (waitingListResponse?.handled) {
       await sendMessage(from, waitingListResponse.reply, replyFromId)
       return

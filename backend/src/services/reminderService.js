@@ -1,3 +1,4 @@
+const { checkLateCustomers } = require('./lateNotificationService')
 const cron = require('node-cron')
 const { Pool } = require('pg')
 const { sendMessage } = require('./metaService')
@@ -88,6 +89,10 @@ const sendReminders = async () => {
     await expireWaitingListOffers()
     console.log('Waiting list expiry check complete')
 
+     // Check for late customers
+    await checkLateCustomers()
+    console.log('Late customer check complete')
+
     // Clean up old processed messages
     await pool.query(
       `DELETE FROM processed_messages WHERE processed_at < NOW() - INTERVAL '24 hours'`
@@ -139,7 +144,7 @@ const logNotification = async (reservationId, type) => {
 }
 
 const startReminderService = () => {
-  cron.schedule('0 * * * *', sendReminders, {
+  cron.schedule('*/15 * * * *', sendReminders, {
     timezone: 'Africa/Johannesburg'
   })
   console.log('Reminder service started — checking every hour')

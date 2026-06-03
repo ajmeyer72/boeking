@@ -11,7 +11,7 @@ const pool = new Pool({
 // All dashboard routes require authentication
 router.use(requireAuth)
 
-// GET /dashboard/today — today's bookings
+// GET /dashboard/today
 router.get('/today', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
@@ -24,7 +24,9 @@ router.get('/today', async (req, res) => {
         r.party_size,
         r.status,
         r.special_requests,
-        r.created_at,
+        r.internal_notes,
+        r.arrived_at,
+        r.late_notification_sent_at,
         c.name as customer_name,
         c.whatsapp_number
        FROM reservations r
@@ -769,6 +771,8 @@ router.get('/dayview', async (req, res) => {
         `SELECT 
           r.id,
           r.reservation_date,
+          r.arrived_at,
+          r.late_notification_sent_at,
           r.reservation_time,
           r.party_size,
           r.status,
@@ -814,6 +818,55 @@ router.get('/dayview', async (req, res) => {
   } catch (error) {
     console.error('Day view error:', error)
     res.status(500).json({ error: 'Failed to fetch day view' })
+  }
+})
+// PATCH /dashboard/reservations/:id/arrived — mark customer as arrived
+router.patch('/reservations/:id/arrived', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    const result = await pool.query(
+      `UPDATE reservations
+       SET arrived_at = NOW(), updated_at = NOW()
+       WHERE id = $1 AND restaurant_id = $2 AND status = 'confirmed'
+       RETURNING *`,
+      [id, restaurantId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Reservation not found' })
+    }
+
+    res.json({ reservation: result.rows[0] })
+  } catch (error) {
+    console.error('Arrived error:', error)
+    res.status(500).json({ error: 'Failed to mark as arrived' })
+  }
+})
+
+// PATCH /dashboard/reservations/:id/unarrived — undo arrived
+router.patch('/reservations/:id/unarrived', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    const result = await pool.query(
+      `UPDATE reservations
+       SET arrived_at = NULL, updated_at = NOW()
+       WHERE id = $1 AND restaurant_id = $2
+       RETURNING *`,
+      [id, restaurantId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Reservation not found' })
+    }
+
+    res.json({ reservation: result.rows[0] })
+  } catch (error) {
+    console.error('Unarrived error:', error)
+    res.status(500).json({ error: 'Failed to undo arrived' })
   }
 })
 module.exports = router
