@@ -316,7 +316,7 @@ export default function BoekingLandingPage() {
             },
             {
               title: 'Growth',
-              price: 'R1,299',
+              price: 'R999',
               featured: true,
               features: ['1 restaurant', 'Unlimited bookings', 'WhatsApp AI booking bot', 'Google Calendar sync', '24hr + 2hr reminders', 'Full staff dashboard', 'Customer history and no-show tracking', 'Custom greeting + branding'],
               missing: ['Multi-branch support'],
