@@ -409,6 +409,13 @@ export default function BoekingLandingPage() {
             &#169; 2026 Boeking.co.za — AI-powered restaurant bookings on WhatsApp.
           </div>
           <div className="text-gray-500 text-sm">
+  info@boeking.co.za · +27 68 742 7177
+</div>
+<div className="flex gap-4 text-gray-600 text-sm">
+  <a href="/privacy" className="hover:text-gray-400 transition">Privacy Policy</a>
+  <a href="/terms" className="hover:text-gray-400 transition">Terms of Service</a>
+</div>
+          <div className="text-gray-500 text-sm">
             info@boeking.co.za · +27 68 742 7177
           </div>
         </div>
