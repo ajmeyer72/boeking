@@ -21,9 +21,20 @@ const checkLateCustomers = async () => {
        AND rs.late_notifications_enabled = true`
     )
 
+    console.log('Restaurants to check:', restaurants.rows.length, restaurants.rows.map(r => r.id))
+
     for (const restaurant of restaurants.rows) {
       const graceMins = restaurant.late_grace_mins || 15
       const autoNoshowMins = restaurant.auto_noshow_mins || 45
+
+      console.log(`Checking restaurant ${restaurant.id} — grace: ${graceMins} mins, auto noshow: ${autoNoshowMins} mins`)
+
+      // Current SA time for comparison
+      const nowResult = await pool.query(
+        `SELECT (NOW() AT TIME ZONE 'Africa/Johannesburg')::time as sa_time`
+      )
+      const saTime = nowResult.rows[0].sa_time
+      console.log('Current SA time:', saTime)
 
       // Find reservations past grace period that have not arrived
       const lateReservations = await pool.query(
@@ -35,12 +46,15 @@ const checkLateCustomers = async () => {
          AND r.reservation_date = CURRENT_DATE
          AND r.arrived_at IS NULL
          AND r.late_notification_sent_at IS NULL
-         AND (CURRENT_TIME AT TIME ZONE 'Africa/Johannesburg') >
+         AND (NOW() AT TIME ZONE 'Africa/Johannesburg')::time >
              (r.reservation_time + ($2 || ' minutes')::INTERVAL)`,
         [restaurant.id, graceMins]
       )
 
+      console.log('Late reservations found:', lateReservations.rows.length)
+
       for (const reservation of lateReservations.rows) {
+        console.log('Processing late reservation:', reservation.id, 'time:', reservation.reservation_time)
         const holdMins = restaurant.late_hold_mins || 30
         const name = reservation.customer_name || 'there'
         const time = reservation.reservation_time.slice(0, 5)
@@ -69,12 +83,16 @@ const checkLateCustomers = async () => {
          AND r.reservation_date = CURRENT_DATE
          AND r.arrived_at IS NULL
          AND r.late_notification_sent_at IS NOT NULL
-         AND (CURRENT_TIME AT TIME ZONE 'Africa/Johannesburg') >
+         AND (NOW() AT TIME ZONE 'Africa/Johannesburg')::time >
              (r.reservation_time + ($2 || ' minutes')::INTERVAL)`,
         [restaurant.id, graceMins + autoNoshowMins]
       )
 
+      console.log('Auto no-show candidates:', autoNoshow.rows.length)
+
       for (const reservation of autoNoshow.rows) {
+        console.log('Auto no-show:', reservation.id)
+
         await pool.query(
           `UPDATE reservations SET status = 'no_show', updated_at = NOW() WHERE id = $1`,
           [reservation.id]
@@ -93,7 +111,7 @@ const checkLateCustomers = async () => {
           reservation.party_size
         )
 
-        console.log(`Auto no-show: ${reservation.id}`)
+        console.log(`Auto no-show processed: ${reservation.id}`)
       }
     }
   } catch (error) {
