@@ -10,20 +10,22 @@ const checkLateCustomers = async () => {
   console.log('Checking for late customers...')
 
   try {
-    // Get all restaurants with their late notification settings
+    // Get all active restaurants with late notifications enabled
     const restaurants = await pool.query(
       `SELECT r.id, r.meta_phone_number_id,
-              rs.late_grace_mins, rs.late_hold_mins, rs.auto_noshow_mins
+              rs.late_grace_mins, rs.late_hold_mins, rs.auto_noshow_mins,
+              rs.late_notifications_enabled
        FROM restaurants r
        JOIN restaurant_settings rs ON rs.restaurant_id = r.id
-       WHERE r.is_active = true`
+       WHERE r.is_active = true
+       AND rs.late_notifications_enabled = true`
     )
 
     for (const restaurant of restaurants.rows) {
       const graceMins = restaurant.late_grace_mins || 15
       const autoNoshowMins = restaurant.auto_noshow_mins || 45
 
-      // Find reservations that are past grace period and haven't arrived
+      // Find reservations past grace period that have not arrived
       const lateReservations = await pool.query(
         `SELECT r.*, c.whatsapp_number, c.name as customer_name
          FROM reservations r
@@ -33,7 +35,7 @@ const checkLateCustomers = async () => {
          AND r.reservation_date = CURRENT_DATE
          AND r.arrived_at IS NULL
          AND r.late_notification_sent_at IS NULL
-         AND (CURRENT_TIME AT TIME ZONE 'Africa/Johannesburg') > 
+         AND (CURRENT_TIME AT TIME ZONE 'Africa/Johannesburg') >
              (r.reservation_time + ($2 || ' minutes')::INTERVAL)`,
         [restaurant.id, graceMins]
       )
@@ -43,13 +45,12 @@ const checkLateCustomers = async () => {
         const name = reservation.customer_name || 'there'
         const time = reservation.reservation_time.slice(0, 5)
 
-        const message = `Hi ${name}! 👋 We have your table ready at ${time} but haven't seen you yet.\n\nShall we hold your table for another ${holdMins} minutes?\n\nReply *YES* to hold your table or *NO* to cancel your reservation.`
+        const message = `Hi ${name}! We have your table ready at ${time} but have not seen you yet.\n\nShall we hold your table for another ${holdMins} minutes?\n\nReply YES to hold your table or NO to cancel your reservation.`
 
         await sendMessage(reservation.whatsapp_number, message, restaurant.meta_phone_number_id)
 
-        // Mark late notification as sent
         await pool.query(
-          `UPDATE reservations 
+          `UPDATE reservations
            SET late_notification_sent_at = NOW(), updated_at = NOW()
            WHERE id = $1`,
           [reservation.id]
@@ -58,7 +59,7 @@ const checkLateCustomers = async () => {
         console.log(`Late notification sent to ${reservation.whatsapp_number}`)
       }
 
-      // Auto no-show reservations that haven't responded
+      // Auto no-show reservations that have not responded
       const autoNoshow = await pool.query(
         `SELECT r.*, c.whatsapp_number, c.name as customer_name
          FROM reservations r
@@ -84,7 +85,6 @@ const checkLateCustomers = async () => {
           [reservation.customer_id]
         )
 
-        // Notify waiting list
         const { notifyWaitingList } = require('./waitingListService')
         await notifyWaitingList(
           restaurant.id,
@@ -102,7 +102,6 @@ const checkLateCustomers = async () => {
 }
 
 const handleLateResponse = async (from, text, restaurantId) => {
-  // Check if there's a pending late notification for this customer
   const reservation = await pool.query(
     `SELECT r.*, c.whatsapp_number
      FROM reservations r
@@ -126,10 +125,9 @@ const handleLateResponse = async (from, text, restaurantId) => {
   if (answer === 'yes' || answer === 'y' || answer === 'ja') {
     const name = res.customer_name || 'there'
     const holdMins = 30
-
     return {
       handled: true,
-      reply: `Great news! We will hold your table for another ${holdMins} minutes. See you soon ${name}! 😊`
+      reply: `Great news! We will hold your table for another ${holdMins} minutes. See you soon ${name}!`
     }
   }
 
@@ -144,7 +142,7 @@ const handleLateResponse = async (from, text, restaurantId) => {
 
     return {
       handled: true,
-      reply: `No problem — your reservation has been cancelled. We hope to see you another time! 😊`
+      reply: `No problem — your reservation has been cancelled. We hope to see you another time!`
     }
   }
 

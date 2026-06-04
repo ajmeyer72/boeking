@@ -473,6 +473,8 @@ router.put('/settings/hours', async (req, res) => {
 })
 
 // PUT /dashboard/settings/config — update booking config
+// Replace the existing PUT /dashboard/settings/config route in backend/src/routes/dashboard.js with this:
+
 router.put('/settings/config', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
@@ -484,7 +486,13 @@ router.put('/settings/config', async (req, res) => {
       booking_window_days,
       greeting_message,
       restaurant_display_name,
-      bot_tone
+      bot_tone,
+      reminder_1_hours,
+      reminder_2_hours,
+      late_grace_mins,
+      late_hold_mins,
+      auto_noshow_mins,
+      late_notifications_enabled
     } = req.body
 
     await pool.query(
@@ -496,8 +504,14 @@ router.put('/settings/config', async (req, res) => {
         booking_window_days = $5,
         greeting_message = $6,
         restaurant_display_name = $7,
-        bot_tone = $8
-       WHERE restaurant_id = $9`,
+        bot_tone = $8,
+        reminder_1_hours = $9,
+        reminder_2_hours = $10,
+        late_grace_mins = $11,
+        late_hold_mins = $12,
+        auto_noshow_mins = $13,
+        late_notifications_enabled = $14
+       WHERE restaurant_id = $15`,
       [
         slot_duration_mins,
         max_covers_per_slot,
@@ -507,6 +521,12 @@ router.put('/settings/config', async (req, res) => {
         greeting_message,
         restaurant_display_name,
         bot_tone,
+        reminder_1_hours || 24,
+        reminder_2_hours || 2,
+        late_grace_mins || 15,
+        late_hold_mins || 30,
+        auto_noshow_mins || 45,
+        late_notifications_enabled !== undefined ? late_notifications_enabled : true,
         restaurantId
       ]
     )
@@ -517,6 +537,7 @@ router.put('/settings/config', async (req, res) => {
     res.status(500).json({ error: 'Failed to update settings' })
   }
 })
+
 
 // POST /dashboard/settings/blocked — add a blocked date
 router.post('/settings/blocked', async (req, res) => {

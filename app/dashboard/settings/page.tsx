@@ -26,6 +26,7 @@ interface Config {
   late_grace_mins: number
   late_hold_mins: number
   auto_noshow_mins: number
+  late_notifications_enabled: boolean
 }
 
 interface BlockedDate {
@@ -55,7 +56,8 @@ export default function SettingsPage() {
     reminder_2_hours: 2,
     late_grace_mins: 15,
     late_hold_mins: 30,
-    auto_noshow_mins: 45
+    auto_noshow_mins: 45,
+    late_notifications_enabled: true
   })
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
   const [newBlockedDate, setNewBlockedDate] = useState('')
@@ -101,7 +103,8 @@ export default function SettingsPage() {
           reminder_2_hours: data.settings.reminder_2_hours || 2,
           late_grace_mins: data.settings.late_grace_mins || 15,
           late_hold_mins: data.settings.late_hold_mins || 30,
-          auto_noshow_mins: data.settings.auto_noshow_mins || 45
+          auto_noshow_mins: data.settings.auto_noshow_mins || 45,
+          late_notifications_enabled: data.settings.late_notifications_enabled !== false
         })
       }
     } catch (err) {
@@ -211,7 +214,7 @@ export default function SettingsPage() {
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-4 mb-10">
         <Link href="/dashboard" className="text-gray-500 hover:text-white transition text-sm">
-          &larr; Back to dashboard
+          Back to dashboard
         </Link>
       </div>
 
@@ -220,7 +223,7 @@ export default function SettingsPage() {
 
       {success && (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-green-400 text-sm mb-6">
-          &#10003; {success}
+          {success}
         </div>
       )}
       {error && (
@@ -398,9 +401,9 @@ export default function SettingsPage() {
             <div>
               <label className="block text-sm text-gray-400 mb-2">Bot tone</label>
               <select value={config.bot_tone} onChange={e => setConfig({ ...config, bot_tone: e.target.value })} style={{ backgroundColor: '#0B0F14', color: 'white' }} className="w-full border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500/50 transition">
-                <option value="friendly" style={{ backgroundColor: '#0B0F14' }}>Friendly — warm and approachable</option>
-                <option value="formal" style={{ backgroundColor: '#0B0F14' }}>Formal — professional and polished</option>
-                <option value="casual" style={{ backgroundColor: '#0B0F14' }}>Casual — relaxed and conversational</option>
+                <option value="friendly" style={{ backgroundColor: '#0B0F14' }}>Friendly - warm and approachable</option>
+                <option value="formal" style={{ backgroundColor: '#0B0F14' }}>Formal - professional and polished</option>
+                <option value="casual" style={{ backgroundColor: '#0B0F14' }}>Casual - relaxed and conversational</option>
               </select>
             </div>
             <div>
@@ -438,24 +441,43 @@ export default function SettingsPage() {
             </div>
 
             <div className="border-t border-white/5 pt-6">
-              <h3 className="text-sm font-medium text-gray-300 mb-4">Late arrival notifications</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-6">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-2">Grace period (minutes)</label>
-                  <input type="number" value={config.late_grace_mins} onChange={e => setConfig({ ...config, late_grace_mins: parseInt(e.target.value) })} min={5} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
-                  <p className="text-gray-600 text-xs mt-1">How long after reservation time before sending late notification</p>
+                  <div className="text-sm font-medium text-gray-300">Late arrival notifications</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Send WhatsApp message to customers who have not arrived by their reservation time
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">Hold table for (minutes)</label>
-                  <input type="number" value={config.late_hold_mins} onChange={e => setConfig({ ...config, late_hold_mins: parseInt(e.target.value) })} min={5} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
-                  <p className="text-gray-600 text-xs mt-1">How long to hold the table after sending late notification</p>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">Auto no-show after (minutes)</label>
-                  <input type="number" value={config.auto_noshow_mins} onChange={e => setConfig({ ...config, auto_noshow_mins: parseInt(e.target.value) })} min={15} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
-                  <p className="text-gray-600 text-xs mt-1">Total minutes after reservation time before automatically marking as no-show</p>
-                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.late_notifications_enabled}
+                    onChange={e => setConfig({ ...config, late_notifications_enabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500" />
+                </label>
               </div>
+
+              {config.late_notifications_enabled && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Grace period (minutes)</label>
+                    <input type="number" value={config.late_grace_mins} onChange={e => setConfig({ ...config, late_grace_mins: parseInt(e.target.value) })} min={5} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
+                    <p className="text-gray-600 text-xs mt-1">How long after reservation time before sending late notification</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Hold table for (minutes)</label>
+                    <input type="number" value={config.late_hold_mins} onChange={e => setConfig({ ...config, late_hold_mins: parseInt(e.target.value) })} min={5} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
+                    <p className="text-gray-600 text-xs mt-1">How long to hold the table after sending late notification</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Auto no-show after (minutes)</label>
+                    <input type="number" value={config.auto_noshow_mins} onChange={e => setConfig({ ...config, auto_noshow_mins: parseInt(e.target.value) })} min={15} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
+                    <p className="text-gray-600 text-xs mt-1">Total minutes after reservation time before automatically marking as no-show</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
