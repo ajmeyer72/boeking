@@ -406,10 +406,7 @@ export default function BoekingLandingPage() {
             <span className="text-2xl font-semibold tracking-tight">boeking</span>
           </div>
           <div className="text-gray-500 text-sm text-center">
-            &#169; 2026 Boeking.co.za — AI-powered restaurant bookings on WhatsApp.
-          </div>
-          <div className="text-gray-500 text-sm">
-  info@boeking.co.za · +27 68 742 7177
+  &#169; 2026 Boeking.co.za — AI-powered restaurant bookings on WhatsApp.
 </div>
 <div className="flex gap-4 text-gray-600 text-sm">
   <a href="/privacy" className="hover:text-gray-400 transition">Privacy Policy</a>
