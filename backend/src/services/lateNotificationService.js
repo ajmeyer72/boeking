@@ -12,14 +12,15 @@ const checkLateCustomers = async () => {
   try {
     // Get all active restaurants with late notifications enabled
     const restaurants = await pool.query(
-      `SELECT r.id, r.meta_phone_number_id,
-              rs.late_grace_mins, rs.late_hold_mins, rs.auto_noshow_mins,
-              rs.late_notifications_enabled
-       FROM restaurants r
-       JOIN restaurant_settings rs ON rs.restaurant_id = r.id
-       WHERE r.is_active = true
-       AND rs.late_notifications_enabled = true`
-    )
+  `SELECT DISTINCT ON (r.id) r.id, r.meta_phone_number_id,
+          rs.late_grace_mins, rs.late_hold_mins, rs.auto_noshow_mins,
+          rs.late_notifications_enabled
+   FROM restaurants r
+   JOIN restaurant_settings rs ON rs.restaurant_id = r.id
+   WHERE r.is_active = true
+   AND rs.late_notifications_enabled = true
+   ORDER BY r.id`
+)
 
     console.log('Restaurants to check:', restaurants.rows.length, restaurants.rows.map(r => r.id))
 
