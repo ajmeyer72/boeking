@@ -12,10 +12,33 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Boeking — Seamless WhatsApp Reservations Powered by AI",
-  description: "Give your restaurant a 24/7 AI booking assistant on WhatsApp. Customers reserve tables instantly, reminders go out automatically, and your calendar stays perfectly in sync.",
-};
+export const metadata = {
+  title: 'Boeking — Seamless WhatsApp Reservations Powered by AI',
+  description: 'Give your restaurant a 24/7 AI booking assistant on WhatsApp. Customers reserve tables instantly, reminders go out automatically, and your staff dashboard stays perfectly in sync.',
+  keywords: 'restaurant booking system South Africa, WhatsApp restaurant reservations, AI booking assistant, restaurant management software Cape Town',
+  openGraph: {
+    title: 'Boeking — Seamless WhatsApp Reservations Powered by AI',
+    description: 'Give your restaurant a 24/7 AI booking assistant on WhatsApp.',
+    url: 'https://www.boeking.co.za',
+    siteName: 'Boeking',
+    locale: 'en_ZA',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Boeking — WhatsApp Restaurant Reservations',
+    description: 'AI-powered restaurant bookings on WhatsApp for South African restaurants.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: 'https://www.boeking.co.za',
+  },
+}
+
+
 
 export default function RootLayout({
   children,
