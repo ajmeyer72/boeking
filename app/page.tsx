@@ -90,7 +90,7 @@ export default function BoekingLandingPage() {
           </div>
 
           <h1 className="text-5xl md:text-7xl font-bold leading-tight tracking-tight mb-6">
-            Seamless {' '} Reservations — Powered by AI
+            Seamless <span className="text-green-500">WhatsApp</span> {' '} Reservations — Powered by AI
             <span className="text-green-500">WhatsApp</span>
           </h1>
 
