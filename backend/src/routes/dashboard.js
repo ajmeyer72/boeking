@@ -890,4 +890,41 @@ router.patch('/reservations/:id/unarrived', async (req, res) => {
     res.status(500).json({ error: 'Failed to undo arrived' })
   }
 })
+// POST /dashboard/send-whatsapp — send outbound WhatsApp to a number
+router.post('/send-whatsapp', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { whatsapp_number, message } = req.body
+
+    if (!whatsapp_number || !message) {
+      return res.status(400).json({ error: 'WhatsApp number and message are required' })
+    }
+
+    // Clean the number — remove spaces, dashes, plus signs
+    const cleanNumber = whatsapp_number.replace(/[\s\-\+]/g, '')
+
+    // Get restaurant phone number ID
+    const restaurant = await pool.query(
+      `SELECT r.meta_phone_number_id, rs.restaurant_display_name, r.name
+       FROM restaurants r
+       JOIN restaurant_settings rs ON rs.restaurant_id = r.id
+       WHERE r.id = $1`,
+      [restaurantId]
+    )
+
+    if (restaurant.rows.length === 0) {
+      return res.status(404).json({ error: 'Restaurant not found' })
+    }
+
+    const { meta_phone_number_id } = restaurant.rows[0]
+    const { sendMessage } = require('../services/metaService')
+
+    await sendMessage(cleanNumber, message, meta_phone_number_id)
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Send WhatsApp error:', error)
+    res.status(500).json({ error: 'Failed to send WhatsApp message' })
+  }
+})
 module.exports = router
