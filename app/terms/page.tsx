@@ -34,7 +34,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">2. The service</h2>
             <p>
-              Boeking provides restaurants with an AI-powered WhatsApp booking assistant that allows customers to make, modify and cancel table reservations. The service includes a staff dashboard for managing reservations, customer records and restaurant settings.
+              Boeking is operated by K2026407825 (South Africa) (Pty) Ltd, registration number 2026/407825/07, trading as Boeking SA. We provide restaurants with an AI-powered WhatsApp booking assistant that allows customers to make, modify and cancel table reservations. The service includes a staff dashboard for managing reservations, customer records and restaurant settings.
             </p>
             <p className="mt-3">
               We reserve the right to modify, suspend or discontinue any part of the service at any time with reasonable notice to subscribers.
@@ -76,7 +76,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">6. WhatsApp and Meta compliance</h2>
             <p>
-              The Boeking service uses the WhatsApp Business API provided by Meta. Subscribers acknowledge that use of the WhatsApp messaging features is subject to Meta's Business Messaging Policy and WhatsApp Business Terms of Service. Boeking is not responsible for any suspension or restriction of WhatsApp services by Meta.
+              The Boeking service uses the WhatsApp Business API provided by Meta. Subscribers acknowledge that use of the WhatsApp messaging features is subject to Meta's Business Messaging Policy and WhatsApp Business Terms of Service. Boeking SA is not responsible for any suspension or restriction of WhatsApp services by Meta.
             </p>
           </section>
 
@@ -90,7 +90,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">8. Limitation of liability</h2>
             <p>
-              Boeking is provided on an "as is" basis. To the maximum extent permitted by law, Daytona PTY LTD shall not be liable for any indirect, incidental or consequential damages arising from use of the service, including but not limited to lost revenue resulting from missed bookings, system downtime or AI errors.
+              Boeking is provided on an "as is" basis. To the maximum extent permitted by law, K2026407825 (South Africa) (Pty) Ltd shall not be liable for any indirect, incidental or consequential damages arising from use of the service, including but not limited to lost revenue resulting from missed bookings, system downtime or AI errors.
             </p>
             <p className="mt-3">
               Our total liability to any subscriber shall not exceed the amount paid by that subscriber in the three months preceding the claim.
@@ -100,14 +100,14 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">9. Intellectual property</h2>
             <p>
-              All intellectual property rights in the Boeking platform, including software, design and content, remain the property of Daytona PTY LTD. Subscribers are granted a limited, non-exclusive licence to use the service for their restaurant operations.
+              All intellectual property rights in the Boeking platform, including software, design and content, remain the property of K2026407825 (South Africa) (Pty) Ltd trading as Boeking SA. Subscribers are granted a limited, non-exclusive licence to use the service for their restaurant operations.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">10. Termination</h2>
             <p>
-              We reserve the right to suspend or terminate any subscription immediately if a subscriber violates these terms, engages in fraudulent activity, or uses the service in a manner that could harm Boeking or its other subscribers.
+              We reserve the right to suspend or terminate any subscription immediately if a subscriber violates these terms, engages in fraudulent activity, or uses the service in a manner that could harm Boeking SA or its other subscribers.
             </p>
           </section>
 
@@ -122,7 +122,9 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold text-white mb-4">12. Contact</h2>
             <p>For any questions regarding these terms, contact us at:</p>
             <div className="mt-3 bg-white/[0.03] border border-white/5 rounded-xl p-4">
-              <p>Boeking — Daytona PTY LTD</p>
+              <p>K2026407825 (South Africa) (Pty) Ltd</p>
+              <p>Registration number: 2026/407825/07</p>
+              <p>Trading as: Boeking SA</p>
               <p>Cape Town, South Africa</p>
               <p><a href="mailto:info@boeking.co.za" className="text-green-400 hover:text-green-300">info@boeking.co.za</a></p>
               <p>+27 68 742 7177</p>
@@ -134,7 +136,7 @@ export default function TermsPage() {
 
       <footer className="border-t border-white/5 mt-16">
         <div className="max-w-4xl mx-auto px-6 py-8 flex items-center justify-between text-sm text-gray-600">
-          <span>© 2026 Boeking · Daytona PTY LTD</span>
+          <span>© 2026 Boeking SA · K2026407825 (South Africa) (Pty) Ltd</span>
           <div className="flex gap-6">
             <Link href="/privacy" className="hover:text-gray-400 transition">Privacy Policy</Link>
             <Link href="/terms" className="hover:text-gray-400 transition">Terms of Service</Link>

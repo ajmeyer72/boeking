@@ -27,7 +27,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">1. Who we are</h2>
             <p>
-              Boeking is a WhatsApp-powered restaurant reservation platform operated by Daytona PTY LTD, based in Cape Town, South Africa. We provide restaurants with an AI-powered booking assistant that allows their customers to make, modify and cancel table reservations via WhatsApp.
+              Boeking is a WhatsApp-powered restaurant reservation platform operated by K2026407825 (South Africa) (Pty) Ltd, registration number 2026/407825/07, trading as Boeking SA, based in Cape Town, South Africa. We provide restaurants with an AI-powered booking assistant that allows their customers to make, modify and cancel table reservations via WhatsApp.
             </p>
             <p className="mt-3">
               For any privacy-related queries, contact us at: <a href="mailto:info@boeking.co.za" className="text-green-400 hover:text-green-300">info@boeking.co.za</a>
@@ -120,11 +120,11 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-xl font-semibold text-white mb-4">10. Contact</h2>
-            <p>
-              For any privacy concerns or requests, please contact us at:
-            </p>
+            <p>For any privacy concerns or requests, please contact us at:</p>
             <div className="mt-3 bg-white/[0.03] border border-white/5 rounded-xl p-4">
-              <p>Boeking — Daytona PTY LTD</p>
+              <p>K2026407825 (South Africa) (Pty) Ltd</p>
+              <p>Registration number: 2026/407825/07</p>
+              <p>Trading as: Boeking SA</p>
               <p>Cape Town, South Africa</p>
               <p><a href="mailto:info@boeking.co.za" className="text-green-400 hover:text-green-300">info@boeking.co.za</a></p>
               <p>+27 68 742 7177</p>
@@ -136,7 +136,7 @@ export default function PrivacyPage() {
 
       <footer className="border-t border-white/5 mt-16">
         <div className="max-w-4xl mx-auto px-6 py-8 flex items-center justify-between text-sm text-gray-600">
-          <span>© 2026 Boeking · Daytona PTY LTD</span>
+          <span>© 2026 Boeking SA · K2026407825 (South Africa) (Pty) Ltd</span>
           <div className="flex gap-6">
             <Link href="/privacy" className="hover:text-gray-400 transition">Privacy Policy</Link>
             <Link href="/terms" className="hover:text-gray-400 transition">Terms of Service</Link>
