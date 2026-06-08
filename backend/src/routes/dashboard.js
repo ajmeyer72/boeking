@@ -892,9 +892,6 @@ router.patch('/reservations/:id/unarrived', async (req, res) => {
 })
 // POST /dashboard/send-whatsapp — send outbound WhatsApp to a number
 router.post('/send-whatsapp', async (req, res) => {
-console.log('Sending WhatsApp to:', cleanNumber)
-console.log('Using phone number ID:', meta_phone_number_id)
-console.log('Message:', message)
   try {
     const restaurantId = req.user.restaurantId
     const { whatsapp_number, message } = req.body
@@ -905,6 +902,8 @@ console.log('Message:', message)
 
     // Clean the number — remove spaces, dashes, plus signs
     const cleanNumber = whatsapp_number.replace(/[\s\-\+]/g, '')
+
+    console.log('Sending WhatsApp to:', cleanNumber)
 
     // Get restaurant phone number ID
     const restaurant = await pool.query(
@@ -920,9 +919,13 @@ console.log('Message:', message)
     }
 
     const { meta_phone_number_id } = restaurant.rows[0]
-    const { sendMessage } = require('../services/metaService')
 
+    console.log('Using phone number ID:', meta_phone_number_id)
+
+    const { sendMessage } = require('../services/metaService')
     await sendMessage(cleanNumber, message, meta_phone_number_id)
+
+    console.log('WhatsApp sent successfully to:', cleanNumber)
 
     res.json({ success: true })
   } catch (error) {
