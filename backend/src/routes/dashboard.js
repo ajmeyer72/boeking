@@ -892,6 +892,9 @@ router.patch('/reservations/:id/unarrived', async (req, res) => {
 })
 // POST /dashboard/send-whatsapp — send outbound WhatsApp to a number
 router.post('/send-whatsapp', async (req, res) => {
+console.log('Sending WhatsApp to:', cleanNumber)
+console.log('Using phone number ID:', meta_phone_number_id)
+console.log('Message:', message)
   try {
     const restaurantId = req.user.restaurantId
     const { whatsapp_number, message } = req.body
