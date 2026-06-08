@@ -535,9 +535,18 @@ export default function DashboardPage() {
                           <Link href={`/dashboard/bookings/${booking.id}/edit`} className="text-xs px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition">
                             Edit
                           </Link>
-                          <button onClick={() => handleNoShow(booking.id)} className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 transition">
-                            No show
-                          </button>
+                          <button
+  onClick={() => handleNoShow(booking.id)}
+  className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 border border-yellow-500/20 transition"
+>
+  No show
+</button>
+<Link
+  href="/dashboard/customers?noshows=true"
+  className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/5 text-yellow-400/60 hover:text-yellow-400 border border-yellow-500/10 transition"
+>
+  View no-shows
+</Link>
                           <button onClick={() => handleCancel(booking.id)} className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition">
                             Cancel
                           </button>

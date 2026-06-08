@@ -20,6 +20,7 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [showNoshowsOnly, setShowNoshowsOnly] = useState(false)
   const [searching, setSearching] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const [customerHistory, setCustomerHistory] = useState<any[]>([])
@@ -65,8 +66,12 @@ export default function CustomersPage() {
   }
 
   useEffect(() => {
-    fetchCustomers()
-  }, [])
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('noshows') === 'true') {
+    setShowNoshowsOnly(true)
+  }
+  fetchCustomers()
+}, [])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -128,7 +133,12 @@ export default function CustomersPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold mb-1">Customers</h1>
-            <p className="text-gray-500 text-sm">{customers.length} total</p>
+            <p className="text-gray-500 text-sm">
+  {showNoshowsOnly
+    ? `${customers.filter(c => c.no_shows > 0).length} customers with no-shows`
+    : `${customers.length} total`
+  }
+</p>
           </div>
           <Link href="/dashboard" className="text-sm text-gray-500 hover:text-white transition">
             ← Dashboard
@@ -136,18 +146,31 @@ export default function CustomersPage() {
         </div>
 
         {/* Search */}
-        <div className="relative mb-6">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or phone number..."
-            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition pr-10"
-          />
-          {searching && (
-            <div className="absolute right-4 top-3.5 text-gray-600 text-sm">...</div>
-          )}
-        </div>
+        {/* Search and filter */}
+<div className="flex gap-3 mb-6">
+  <div className="relative flex-1">
+    <input
+      type="text"
+      value={search}
+      onChange={e => setSearch(e.target.value)}
+      placeholder="Search by name or phone number..."
+      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition pr-10"
+    />
+    {searching && (
+      <div className="absolute right-4 top-3.5 text-gray-600 text-sm">...</div>
+    )}
+  </div>
+  <button
+    onClick={() => setShowNoshowsOnly(!showNoshowsOnly)}
+    className={`px-4 py-3 rounded-xl text-sm font-medium transition border whitespace-nowrap ${
+      showNoshowsOnly
+        ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+        : 'bg-white/[0.03] text-gray-400 hover:text-white border-white/10'
+    }`}
+  >
+    {showNoshowsOnly ? '⚠ No-shows only' : 'All customers'}
+  </button>
+</div>
 
         {/* Customer table */}
         {customers.length === 0 ? (
@@ -171,7 +194,9 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody>
-                {customers.map((customer, i) => {
+                {customers
+  .filter(customer => showNoshowsOnly ? customer.no_shows > 0 : true)
+  .map((customer, i) => {
                   const risk = getNoShowRisk(customer)
                   const isSelected = selectedCustomer?.id === customer.id
 
