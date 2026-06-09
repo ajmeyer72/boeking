@@ -894,18 +894,18 @@ router.patch('/reservations/:id/unarrived', async (req, res) => {
 router.post('/send-whatsapp', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
-    const { whatsapp_number, message } = req.body
+    const { whatsapp_number, customer_name, use_template } = req.body
 
-    if (!whatsapp_number || !message) {
-      return res.status(400).json({ error: 'WhatsApp number and message are required' })
+    if (!whatsapp_number) {
+      return res.status(400).json({ error: 'WhatsApp number is required' })
     }
 
-    // Clean the number — remove spaces, dashes, plus signs
+    // Clean the number
     const cleanNumber = whatsapp_number.replace(/[\s\-\+]/g, '')
 
     console.log('Sending WhatsApp to:', cleanNumber)
 
-    // Get restaurant phone number ID
+    // Get restaurant details
     const restaurant = await pool.query(
       `SELECT r.meta_phone_number_id, rs.restaurant_display_name, r.name
        FROM restaurants r
@@ -918,14 +918,22 @@ router.post('/send-whatsapp', async (req, res) => {
       return res.status(404).json({ error: 'Restaurant not found' })
     }
 
-    const { meta_phone_number_id } = restaurant.rows[0]
+    const { meta_phone_number_id, restaurant_display_name, name } = restaurant.rows[0]
+    const restaurantName = restaurant_display_name || name
 
     console.log('Using phone number ID:', meta_phone_number_id)
 
-    const { sendMessage } = require('../services/metaService')
-    await sendMessage(cleanNumber, message, meta_phone_number_id)
+    const { sendTemplate } = require('../services/metaService')
 
-    console.log('WhatsApp sent successfully to:', cleanNumber)
+    // Use booking_invitation template
+    await sendTemplate(
+      cleanNumber,
+      'booking_invitation',
+      [customer_name || 'there', restaurantName],
+      meta_phone_number_id
+    )
+
+    console.log('WhatsApp invitation sent successfully to:', cleanNumber)
 
     res.json({ success: true })
   } catch (error) {
@@ -933,4 +941,5 @@ router.post('/send-whatsapp', async (req, res) => {
     res.status(500).json({ error: 'Failed to send WhatsApp message' })
   }
 })
+
 module.exports = router

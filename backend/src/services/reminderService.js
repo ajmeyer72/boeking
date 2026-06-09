@@ -1,6 +1,6 @@
 const cron = require('node-cron')
 const { Pool } = require('pg')
-const { sendMessage } = require('./metaService')
+const { sendTemplate } = require('./metaService')
 const { expireWaitingListOffers } = require('./waitingListService')
 const { checkLateCustomers } = require('./lateNotificationService')
 
@@ -23,11 +23,12 @@ const sendReminders = async () => {
 
     // Get all active restaurants with their reminder settings
     const restaurants = await pool.query(
-      `SELECT r.id, r.meta_phone_number_id,
+      `SELECT DISTINCT ON (r.id) r.id, r.meta_phone_number_id,
               rs.reminder_1_hours, rs.reminder_2_hours
        FROM restaurants r
        JOIN restaurant_settings rs ON rs.restaurant_id = r.id
-       WHERE r.is_active = true`
+       WHERE r.is_active = true
+       ORDER BY r.id`
     )
 
     for (const restaurant of restaurants.rows) {
@@ -53,13 +54,28 @@ const sendReminders = async () => {
         )
 
         for (const reservation of firstReminder.rows) {
-          const message = formatReminderMessage(reservation, '24hr')
-          await sendMessage(reservation.whatsapp_number, message, restaurant.meta_phone_number_id)
+          const name = reservation.customer_name || 'there'
+          const date = new Date(reservation.reservation_date).toLocaleDateString('en-ZA', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            timeZone: 'Africa/Johannesburg'
+          })
+          const time = reservation.reservation_time.slice(0, 5)
+          const party = reservation.party_size.toString()
+
+          await sendTemplate(
+            reservation.whatsapp_number,
+            '24hr_reminder',
+            [name, date, time, party],
+            restaurant.meta_phone_number_id
+          )
+
           await logNotification(reservation.id, 'reminder_24hr')
-          console.log(`First reminder sent to ${reservation.whatsapp_number}`)
+          console.log(`24hr reminder sent to ${reservation.whatsapp_number}`)
         }
       } else {
-        console.log(`Skipping first reminders - current hour is ${currentHour}:00, reminders start at 11:00`)
+        console.log(`Skipping 24hr reminders - current hour is ${currentHour}:00, reminders start at 11:00`)
       }
 
       // Second reminder
@@ -83,10 +99,25 @@ const sendReminders = async () => {
       )
 
       for (const reservation of secondReminder.rows) {
-        const message = formatReminderMessage(reservation, '2hr')
-        await sendMessage(reservation.whatsapp_number, message, restaurant.meta_phone_number_id)
+        const name = reservation.customer_name || 'there'
+        const date = new Date(reservation.reservation_date).toLocaleDateString('en-ZA', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          timeZone: 'Africa/Johannesburg'
+        })
+        const time = reservation.reservation_time.slice(0, 5)
+        const party = reservation.party_size.toString()
+
+        await sendTemplate(
+          reservation.whatsapp_number,
+          '2hr_reminder',
+          [name, date, time, party],
+          restaurant.meta_phone_number_id
+        )
+
         await logNotification(reservation.id, 'reminder_2hr')
-        console.log(`Second reminder sent to ${reservation.whatsapp_number}`)
+        console.log(`2hr reminder sent to ${reservation.whatsapp_number}`)
       }
     }
 
@@ -120,37 +151,6 @@ const sendReminders = async () => {
   } catch (error) {
     console.error('Reminder service error:', error)
   }
-}
-
-const formatReminderMessage = (reservation, type) => {
-  const name = reservation.customer_name || 'there'
-  const date = new Date(reservation.reservation_date).toLocaleDateString('en-ZA', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'Africa/Johannesburg'
-  })
-  const time = reservation.reservation_time.slice(0, 5)
-  const party = reservation.party_size
-  const requests = reservation.special_requests
-
-  if (type === '24hr') {
-    return `Hi ${name}! Just a reminder that you have a table booked with us tomorrow.
-
-Date: ${date}
-Time: ${time}
-Guests: ${party} ${party === 1 ? 'guest' : 'guests'}${requests ? '\nSpecial requests: ' + requests : ''}
-
-We look forward to seeing you! If you need to make any changes, just reply to this message.`
-  }
-
-  return `Hi ${name}! Your table is coming up in about 2 hours!
-
-Date: ${date}
-Time: ${time}
-Guests: ${party} ${party === 1 ? 'guest' : 'guests'}${requests ? '\nSpecial requests: ' + requests : ''}
-
-See you soon! If you need to make any changes, just reply to this message.`
 }
 
 const logNotification = async (reservationId, type) => {
