@@ -27,6 +27,8 @@ interface Config {
   late_hold_mins: number
   auto_noshow_mins: number
   late_notifications_enabled: boolean
+  booking_notifications_enabled: boolean
+  notification_number: string
 }
 
 interface BlockedDate {
@@ -57,7 +59,9 @@ export default function SettingsPage() {
     late_grace_mins: 15,
     late_hold_mins: 30,
     auto_noshow_mins: 45,
-    late_notifications_enabled: true
+    late_notifications_enabled: true,
+    booking_notifications_enabled: false,
+    notification_number: ''
   })
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
   const [newBlockedDate, setNewBlockedDate] = useState('')
@@ -104,7 +108,9 @@ export default function SettingsPage() {
           late_grace_mins: data.settings.late_grace_mins || 15,
           late_hold_mins: data.settings.late_hold_mins || 30,
           auto_noshow_mins: data.settings.auto_noshow_mins || 45,
-          late_notifications_enabled: data.settings.late_notifications_enabled !== false
+          late_notifications_enabled: data.settings.late_notifications_enabled !== false,
+          booking_notifications_enabled: data.settings.booking_notifications_enabled || false,
+          notification_number: data.settings.notification_number || ''
         })
       }
     } catch (err) {
@@ -193,8 +199,8 @@ export default function SettingsPage() {
   }
 
   const updateHour = (dayIndex: number, field: keyof Hour, value: string | boolean) => {
-    setHours(prev => prev.map((h, i) => i === dayIndex ? { ...h, [field]: value } : h))
-  }
+  setHours((prev: Hour[]) => prev.map((h: Hour, i: number) => i === dayIndex ? { ...h, [field]: value } : h))
+}
 
   const timeOptions: string[] = []
   for (let h = 7; h <= 24; h++) {
@@ -421,9 +427,11 @@ export default function SettingsPage() {
       {activeSection === 'reminders' && (
         <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6">
           <h2 className="text-lg font-semibold mb-2">Reminder settings</h2>
-          <p className="text-gray-500 text-sm mb-6">Configure when reminders and late notifications are sent to customers</p>
+          <p className="text-gray-500 text-sm mb-6">Configure when reminders and notifications are sent</p>
 
           <div className="space-y-6">
+
+            {/* Booking reminders */}
             <div>
               <h3 className="text-sm font-medium text-gray-300 mb-4">Booking reminders</h3>
               <div className="grid grid-cols-2 gap-4">
@@ -440,21 +448,15 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* Late arrival notifications */}
             <div className="border-t border-white/5 pt-6">
-              <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-6">
+              <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-4">
                 <div>
                   <div className="text-sm font-medium text-gray-300">Late arrival notifications</div>
-                  <div className="text-xs text-gray-500 mt-0.5">
-                    Send WhatsApp message to customers who have not arrived by their reservation time
-                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">Send WhatsApp message to customers who have not arrived by their reservation time</div>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.late_notifications_enabled}
-                    onChange={e => setConfig({ ...config, late_notifications_enabled: e.target.checked })}
-                    className="sr-only peer"
-                  />
+                  <input type="checkbox" checked={config.late_notifications_enabled} onChange={e => setConfig({ ...config, late_notifications_enabled: e.target.checked })} className="sr-only peer" />
                   <div className="w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500" />
                 </label>
               </div>
@@ -479,6 +481,41 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+
+            {/* New booking notifications */}
+            <div className="border-t border-white/5 pt-6">
+              <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-4">
+                <div>
+                  <div className="text-sm font-medium text-gray-300">New booking notifications</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Send a WhatsApp notification when a new booking is made via the bot</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={config.booking_notifications_enabled} onChange={e => setConfig({ ...config, booking_notifications_enabled: e.target.checked })} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500" />
+                </label>
+              </div>
+
+              {config.booking_notifications_enabled && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Notification WhatsApp number</label>
+                  <input
+                    type="text"
+                    value={config.notification_number}
+                    onChange={e => {
+                      let num = e.target.value.replace(/[\s\-\+]/g, '')
+                      if (num.startsWith('0')) num = '27' + num.slice(1)
+                      setConfig({ ...config, notification_number: num })
+                    }}
+                    placeholder="e.g. 27821234567"
+                    className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
+                  />
+                  <p className="text-gray-600 text-xs mt-1">
+                    The number that will receive a WhatsApp notification for every new booking. Include country code without + e.g. 27821234567
+                  </p>
+                </div>
+              )}
+            </div>
+
           </div>
 
           <button onClick={saveConfig} disabled={saving === 'config'} className="mt-6 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-6 py-2.5 rounded-xl transition text-sm">

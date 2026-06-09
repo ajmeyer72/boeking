@@ -9,7 +9,6 @@ const pool = new Pool({
 })
 
 const getOrCreateConversation = async (from, metaPhoneNumberId) => {
-  // Look up restaurant first
   const restaurant = await pool.query(
     `SELECT id, meta_phone_number_id FROM restaurants
      WHERE meta_phone_number_id = $1 AND is_active = true LIMIT 1`,
@@ -24,7 +23,6 @@ const getOrCreateConversation = async (from, metaPhoneNumberId) => {
   const restaurantId = restaurant.rows[0].id
   const restaurantPhoneNumberId = restaurant.rows[0].meta_phone_number_id
 
-  // Find active conversation for this customer AND this specific restaurant
   const active = await pool.query(
     `SELECT c.*, cu.name as customer_name, r.meta_phone_number_id
      FROM conversations c
@@ -42,7 +40,6 @@ const getOrCreateConversation = async (from, metaPhoneNumberId) => {
     return active.rows[0]
   }
 
-  // Create new customer if needed
   let customer = await pool.query(
     `SELECT * FROM customers
      WHERE whatsapp_number = $1
@@ -110,6 +107,34 @@ const updateConversationState = async (conversationId, newState) => {
      WHERE id = $2`,
     [newState, conversationId]
   )
+}
+
+const sendBookingNotification = async (restaurantId, bookingDetails, customerName, phoneNumberId) => {
+  try {
+    const settings = await pool.query(
+      `SELECT booking_notifications_enabled, notification_number
+       FROM restaurant_settings
+       WHERE restaurant_id = $1`,
+      [restaurantId]
+    )
+
+    if (!settings.rows.length) return
+    const { booking_notifications_enabled, notification_number } = settings.rows[0]
+
+    if (!booking_notifications_enabled || !notification_number) return
+
+    let cleanNumber = notification_number.replace(/[\s\-\+]/g, '')
+    if (cleanNumber.startsWith('0')) {
+      cleanNumber = '27' + cleanNumber.slice(1)
+    }
+
+    const message = `New booking received!\n\n👤 ${customerName || 'Unknown'}\n📅 ${bookingDetails.date}\n🕕 ${bookingDetails.time}\n👥 ${bookingDetails.party} ${parseInt(bookingDetails.party) === 1 ? 'guest' : 'guests'}${bookingDetails.requests && bookingDetails.requests !== 'none' ? `\n✨ ${bookingDetails.requests}` : ''}\n\nLogin to your dashboard to view all bookings.`
+
+    await sendMessage(cleanNumber, message, phoneNumberId)
+    console.log(`Booking notification sent to ${cleanNumber}`)
+  } catch (error) {
+    console.error('Failed to send booking notification:', error)
+  }
 }
 
 const saveReservation = async (conversation, bookingDetails) => {
@@ -232,7 +257,6 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
     const replyFromId = conversation.meta_phone_number_id || metaPhoneNumberId
 
     // If booking is confirmed and customer sends a follow up message
-    // respond politely and close the conversation
     if (conversation.state === 'confirmed') {
       const closingMessage = getClosingMessage()
       await sendMessage(from, closingMessage, replyFromId)
@@ -241,7 +265,7 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
       return
     }
 
-    // If conversation is closed start fresh by resetting to new
+    // If conversation is closed reset to new
     if (conversation.state === 'closed') {
       await updateConversationState(conversation.id, 'new')
       console.log('Closed conversation reset to new')
@@ -283,6 +307,14 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
       if (bookingDetails) {
         await saveReservation(conversation, bookingDetails)
         console.log('Reservation saved successfully')
+
+        // Send booking notification to restaurant
+        await sendBookingNotification(
+          conversation.restaurant_id,
+          bookingDetails,
+          bookingDetails.name,
+          replyFromId
+        )
       }
     }
 
@@ -326,4 +358,4 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
   }
 }
 
-module.exports = { handleIncomingMessage }
+module.exports = { handleIncomingMessage, sendBookingNotification }

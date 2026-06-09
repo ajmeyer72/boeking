@@ -475,6 +475,8 @@ router.put('/settings/hours', async (req, res) => {
 // PUT /dashboard/settings/config — update booking config
 // Replace the existing PUT /dashboard/settings/config route in backend/src/routes/dashboard.js with this:
 
+// Replace the existing PUT /dashboard/settings/config route in backend/src/routes/dashboard.js with this:
+
 router.put('/settings/config', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
@@ -492,7 +494,9 @@ router.put('/settings/config', async (req, res) => {
       late_grace_mins,
       late_hold_mins,
       auto_noshow_mins,
-      late_notifications_enabled
+      late_notifications_enabled,
+      booking_notifications_enabled,
+      notification_number
     } = req.body
 
     await pool.query(
@@ -510,8 +514,10 @@ router.put('/settings/config', async (req, res) => {
         late_grace_mins = $11,
         late_hold_mins = $12,
         auto_noshow_mins = $13,
-        late_notifications_enabled = $14
-       WHERE restaurant_id = $15`,
+        late_notifications_enabled = $14,
+        booking_notifications_enabled = $15,
+        notification_number = $16
+       WHERE restaurant_id = $17`,
       [
         slot_duration_mins,
         max_covers_per_slot,
@@ -527,6 +533,8 @@ router.put('/settings/config', async (req, res) => {
         late_hold_mins || 30,
         auto_noshow_mins || 45,
         late_notifications_enabled !== undefined ? late_notifications_enabled : true,
+        booking_notifications_enabled || false,
+        notification_number || null,
         restaurantId
       ]
     )
@@ -537,6 +545,7 @@ router.put('/settings/config', async (req, res) => {
     res.status(500).json({ error: 'Failed to update settings' })
   }
 })
+
 
 
 // POST /dashboard/settings/blocked — add a blocked date
