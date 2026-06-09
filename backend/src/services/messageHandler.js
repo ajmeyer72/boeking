@@ -9,45 +9,40 @@ const pool = new Pool({
 })
 
 const getOrCreateConversation = async (from, metaPhoneNumberId) => {
-  // Look up restaurant first so we match conversation to correct restaurant
-const restaurant = await pool.query(
-  `SELECT id, meta_phone_number_id FROM restaurants 
-   WHERE meta_phone_number_id = $1 AND is_active = true LIMIT 1`,
-  [metaPhoneNumberId]
-)
+  // Look up restaurant first
+  const restaurant = await pool.query(
+    `SELECT id, meta_phone_number_id FROM restaurants
+     WHERE meta_phone_number_id = $1 AND is_active = true LIMIT 1`,
+    [metaPhoneNumberId]
+  )
 
-if (restaurant.rows.length === 0) {
-  console.error('No restaurant found for phone number ID:', metaPhoneNumberId)
-  throw new Error(`No restaurant found for phone number ID: ${metaPhoneNumberId}`)
-}
+  if (restaurant.rows.length === 0) {
+    console.error('No restaurant found for phone number ID:', metaPhoneNumberId)
+    throw new Error(`No restaurant found for phone number ID: ${metaPhoneNumberId}`)
+  }
 
-const restaurantId = restaurant.rows[0].id
-const restaurantPhoneNumberId = restaurant.rows[0].meta_phone_number_id
+  const restaurantId = restaurant.rows[0].id
+  const restaurantPhoneNumberId = restaurant.rows[0].meta_phone_number_id
 
-// Find active conversation for this customer AND this specific restaurant
-const active = await pool.query(
-  `SELECT c.*, cu.name as customer_name, r.meta_phone_number_id
-   FROM conversations c
-   LEFT JOIN customers cu ON cu.id = c.customer_id
-   LEFT JOIN restaurants r ON r.id = c.restaurant_id
-   WHERE c.whatsapp_thread_id = $1
-   AND c.restaurant_id = $2
-   AND c.state = 'in_progress'
-   ORDER BY c.last_message_at DESC
-   LIMIT 1`,
-  [from, restaurantId]
-)
-
-if (active.rows.length > 0) {
-  return active.rows[0]
-}
+  // Find active conversation for this customer AND this specific restaurant
+  const active = await pool.query(
+    `SELECT c.*, cu.name as customer_name, r.meta_phone_number_id
+     FROM conversations c
+     LEFT JOIN customers cu ON cu.id = c.customer_id
+     LEFT JOIN restaurants r ON r.id = c.restaurant_id
+     WHERE c.whatsapp_thread_id = $1
+     AND c.restaurant_id = $2
+     AND c.state IN ('in_progress', 'confirmed', 'closed')
+     ORDER BY c.last_message_at DESC
+     LIMIT 1`,
+    [from, restaurantId]
+  )
 
   if (active.rows.length > 0) {
     return active.rows[0]
   }
 
-  // Look up restaurant by Meta Phone Number ID
-  
+  // Create new customer if needed
   let customer = await pool.query(
     `SELECT * FROM customers
      WHERE whatsapp_number = $1
@@ -218,15 +213,39 @@ const parseBookingDetails = (reply) => {
   return details
 }
 
+const getClosingMessage = () => {
+  const messages = [
+    "You're welcome! We look forward to seeing you. If you need to make any changes to your booking, just let us know! 😊",
+    "It's our pleasure! See you soon. Feel free to message us if you need anything. 😊",
+    "Thank you! We can't wait to welcome you. If anything changes, just send us a message. 😊"
+  ]
+  return messages[Math.floor(Math.random() * messages.length)]
+}
+
 const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
   try {
     console.log(`Message from ${from}: ${text}`)
 
     const conversation = await getOrCreateConversation(from, metaPhoneNumberId)
-    console.log('Conversation retrieved:', conversation.id)
+    console.log('Conversation retrieved:', conversation.id, 'state:', conversation.state)
 
-    // Get the phone number ID to reply from
     const replyFromId = conversation.meta_phone_number_id || metaPhoneNumberId
+
+    // If booking is confirmed and customer sends a follow up message
+    // respond politely and close the conversation
+    if (conversation.state === 'confirmed') {
+      const closingMessage = getClosingMessage()
+      await sendMessage(from, closingMessage, replyFromId)
+      await updateConversationState(conversation.id, 'closed')
+      console.log('Post-confirmation message handled — conversation closed')
+      return
+    }
+
+    // If conversation is closed start fresh by resetting to new
+    if (conversation.state === 'closed') {
+      await updateConversationState(conversation.id, 'new')
+      console.log('Closed conversation reset to new')
+    }
 
     // Check if this is a waiting list response
     const waitingListResponse = await handleWaitingListResponse(
@@ -234,6 +253,11 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
       text,
       conversation.restaurant_id
     )
+
+    if (waitingListResponse?.handled) {
+      await sendMessage(from, waitingListResponse.reply, replyFromId)
+      return
+    }
 
     // Check if this is a late notification response
     const { handleLateResponse } = require('./lateNotificationService')
@@ -245,11 +269,6 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
 
     if (lateResponse?.handled) {
       await sendMessage(from, lateResponse.reply, replyFromId)
-      return
-    }
-
-    if (waitingListResponse?.handled) {
-      await sendMessage(from, waitingListResponse.reply, replyFromId)
       return
     }
 
