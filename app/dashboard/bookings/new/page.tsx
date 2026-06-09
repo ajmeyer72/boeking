@@ -28,10 +28,17 @@ export default function NewBookingPage() {
   const base = process.env.NEXT_PUBLIC_API_URL
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
-    setAvailability(null)
-    setError('')
+  let value = e.target.value
+  if (e.target.name === 'whatsapp_number') {
+    value = value.replace(/[\s\-\+]/g, '')
+    if (value.startsWith('0')) {
+      value = '27' + value.slice(1)
+    }
   }
+  setForm({ ...form, [e.target.name]: value })
+  setAvailability(null)
+  setError('')
+}
 
   const checkAvailability = async () => {
     if (!form.reservation_date || !form.reservation_time || !form.party_size) {

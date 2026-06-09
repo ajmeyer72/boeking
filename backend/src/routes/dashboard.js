@@ -901,7 +901,10 @@ router.post('/send-whatsapp', async (req, res) => {
     }
 
     // Clean the number
-    const cleanNumber = whatsapp_number.replace(/[\s\-\+]/g, '')
+    let cleanNumber = whatsapp_number.replace(/[\s\-\+]/g, '')
+if (cleanNumber.startsWith('0')) {
+  cleanNumber = '27' + cleanNumber.slice(1)
+}
 
     console.log('Sending WhatsApp to:', cleanNumber)
 

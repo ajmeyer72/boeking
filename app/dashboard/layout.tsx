@@ -195,7 +195,13 @@ export default function DashboardLayout({
                 <input
                   type="text"
                   value={waNumber}
-                  onChange={e => setWaNumber(e.target.value)}
+                  onChange={e => {
+  let num = e.target.value.replace(/[\s\-\+]/g, '')
+  if (num.startsWith('0')) {
+    num = '27' + num.slice(1)
+  }
+  setWaNumber(num)
+}}
                   placeholder="e.g. 27821234567"
                   className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
                 />
