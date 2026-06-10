@@ -9,20 +9,17 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 })
 
-// Rate limiting — simple in-memory store
+// Rate limiting - simple in-memory store
 const loginAttempts = {}
 
 const checkRateLimit = (email) => {
   const now = Date.now()
   const attempts = loginAttempts[email]
-
   if (attempts) {
-    // Reset if lockout period has passed (15 minutes)
     if (now - attempts.firstAttempt > 3 * 60 * 1000) {
       delete loginAttempts[email]
       return true
     }
-    // Block if 5 or more attempts
     if (attempts.count >= 5) {
       return false
     }
@@ -54,16 +51,15 @@ router.post('/login', async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Check rate limit
     if (!checkRateLimit(normalizedEmail)) {
       return res.status(429).json({
         error: 'Too many login attempts. Please try again in 3 minutes.'
       })
     }
 
-    // Find user
+    // Find user and include restaurant plan
     const result = await pool.query(
-      `SELECT u.*, r.name as restaurant_name, r.slug as restaurant_slug
+      `SELECT u.*, r.name as restaurant_name, r.slug as restaurant_slug, r.plan as restaurant_plan
        FROM users u
        LEFT JOIN restaurants r ON r.id = u.restaurant_id
        WHERE u.email = $1 AND u.is_active = true`,
@@ -77,24 +73,20 @@ router.post('/login', async (req, res) => {
 
     const user = result.rows[0]
 
-    // Check password
     const validPassword = await bcrypt.compare(password, user.password_hash)
-
     if (!validPassword) {
       recordLoginAttempt(normalizedEmail)
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
-    // Clear rate limit on successful login
     clearLoginAttempts(normalizedEmail)
 
-    // Update last login
     await pool.query(
       `UPDATE users SET last_login = NOW() WHERE id = $1`,
       [user.id]
     )
 
-    // Generate JWT token
+    // Generate JWT token including plan
     const token = jwt.sign(
       {
         userId: user.id,
@@ -102,7 +94,8 @@ router.post('/login', async (req, res) => {
         role: user.role,
         restaurantId: user.restaurant_id,
         restaurantName: user.restaurant_name,
-        restaurantSlug: user.restaurant_slug
+        restaurantSlug: user.restaurant_slug,
+        plan: user.restaurant_plan || 'growth'
       },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
@@ -116,17 +109,17 @@ router.post('/login', async (req, res) => {
         name: user.name,
         role: user.role,
         restaurantId: user.restaurant_id,
-        restaurantName: user.restaurant_name
+        restaurantName: user.restaurant_name,
+        plan: user.restaurant_plan || 'growth'
       }
     })
-
   } catch (error) {
     console.error('Login error:', error)
     res.status(500).json({ error: 'Something went wrong. Please try again.' })
   }
 })
 
-// POST /auth/verify — verify a token is still valid
+// POST /auth/verify - verify a token is still valid
 router.post('/verify', async (req, res) => {
   try {
     const authHeader = req.headers.authorization
@@ -136,7 +129,6 @@ router.post('/verify', async (req, res) => {
 
     const token = authHeader.split(' ')[1]
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
-
     res.json({ valid: true, user: decoded })
   } catch (error) {
     res.status(401).json({ valid: false, error: 'Invalid or expired token' })

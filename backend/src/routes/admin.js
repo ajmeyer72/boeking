@@ -147,16 +147,25 @@ router.post('/restaurants', async (req, res) => {
   }
 })
 
-// GET /admin/restaurants/:id — single restaurant details
+// Find the existing GET /admin/restaurants/:id route and replace with this:
+
 router.get('/restaurants/:id', async (req, res) => {
   try {
     const { id } = req.params
 
-    const [restaurant, settings, hours, users] = await Promise.all([
+    const [restaurant, settings, hours, users, monthlyBookings] = await Promise.all([
       pool.query(`SELECT * FROM restaurants WHERE id = $1`, [id]),
       pool.query(`SELECT * FROM restaurant_settings WHERE restaurant_id = $1`, [id]),
       pool.query(`SELECT * FROM operating_hours WHERE restaurant_id = $1 ORDER BY day_of_week`, [id]),
-      pool.query(`SELECT id, name, email, role, is_active, last_login FROM users WHERE restaurant_id = $1`, [id])
+      pool.query(`SELECT id, name, email, role, is_active, last_login FROM users WHERE restaurant_id = $1`, [id]),
+      pool.query(
+        `SELECT COUNT(*) as count FROM reservations
+         WHERE restaurant_id = $1
+         AND status = 'confirmed'
+         AND EXTRACT(MONTH FROM reservation_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+         AND EXTRACT(YEAR FROM reservation_date) = EXTRACT(YEAR FROM CURRENT_DATE)`,
+        [id]
+      )
     ])
 
     if (restaurant.rows.length === 0) {
@@ -167,7 +176,8 @@ router.get('/restaurants/:id', async (req, res) => {
       restaurant: restaurant.rows[0],
       settings: settings.rows[0],
       hours: hours.rows,
-      users: users.rows
+      users: users.rows,
+      currentMonthBookings: parseInt(monthlyBookings.rows[0].count)
     })
   } catch (error) {
     console.error('Get restaurant error:', error)
@@ -175,7 +185,9 @@ router.get('/restaurants/:id', async (req, res) => {
   }
 })
 
-// PUT /admin/restaurants/:id — update restaurant
+
+// Find the existing PUT /admin/restaurants/:id route and replace with this:
+
 router.put('/restaurants/:id', async (req, res) => {
   try {
     const { id } = req.params
@@ -184,6 +196,8 @@ router.put('/restaurants/:id', async (req, res) => {
       whatsapp_number,
       meta_phone_number_id,
       is_active,
+      plan,
+      monthly_booking_limit,
       slot_duration_mins,
       max_covers_per_slot,
       max_party_size,
@@ -195,9 +209,12 @@ router.put('/restaurants/:id', async (req, res) => {
     } = req.body
 
     await pool.query(
-      `UPDATE restaurants SET name = $1, whatsapp_number = $2, meta_phone_number_id = $3, is_active = $4
-       WHERE id = $5`,
-      [name, whatsapp_number, meta_phone_number_id, is_active, id]
+      `UPDATE restaurants 
+       SET name = $1, whatsapp_number = $2, meta_phone_number_id = $3, 
+           is_active = $4, plan = $5, monthly_booking_limit = $6,
+           plan_updated_at = NOW()
+       WHERE id = $7`,
+      [name, whatsapp_number, meta_phone_number_id, is_active, plan || 'growth', monthly_booking_limit || null, id]
     )
 
     await pool.query(

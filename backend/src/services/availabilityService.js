@@ -315,6 +315,56 @@ const checkBlockedDate = async (restaurantId, date) => {
 
   return { blocked: false }
 }
+// Add after the checkBlockedDate function and before the module.exports
+
+const checkMonthlyLimit = async (restaurantId) => {
+  // Get restaurant plan and limit
+  const restaurant = await pool.query(
+    `SELECT r.plan, r.monthly_booking_limit
+     FROM restaurants r
+     WHERE r.id = $1`,
+    [restaurantId]
+  )
+
+  if (restaurant.rows.length === 0) return { withinLimit: true }
+
+  const { plan, monthly_booking_limit } = restaurant.rows[0]
+
+  // Growth plan has no limit
+  if (plan === 'growth' || !monthly_booking_limit) return { withinLimit: true }
+
+  // Count confirmed bookings this month
+  const count = await pool.query(
+    `SELECT COUNT(*) as count FROM reservations
+     WHERE restaurant_id = $1
+     AND status = 'confirmed'
+     AND EXTRACT(MONTH FROM reservation_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+     AND EXTRACT(YEAR FROM reservation_date) = EXTRACT(YEAR FROM CURRENT_DATE)`,
+    [restaurantId]
+  )
+
+  const currentCount = parseInt(count.rows[0].count)
+
+  if (currentCount >= monthly_booking_limit) {
+    return {
+      withinLimit: false,
+      message: `Sorry, we have reached our maximum bookings for this month. Please call us directly to make a reservation.`
+    }
+  }
+
+  return {
+    withinLimit: true,
+    remaining: monthly_booking_limit - currentCount
+  }
+}
+
+// Also update the module.exports at the bottom to include checkMonthlyLimit:
+// module.exports = {
+//   checkAvailability,
+//   checkOperatingHours,
+//   checkBlockedDate,
+//   checkMonthlyLimit
+// }
 
 module.exports = {
   checkAvailability,
