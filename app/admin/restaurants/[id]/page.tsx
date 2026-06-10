@@ -11,8 +11,8 @@ export default function ManageRestaurantPage() {
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState('')
+  const [error, setError] = useState('')
   const [data, setData] = useState<any>(null)
   const [addingUser, setAddingUser] = useState(false)
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'staff' })
@@ -40,7 +40,7 @@ export default function ManageRestaurantPage() {
 
   const showSuccess = (msg: string) => {
     setSuccess(msg)
-    setTimeout(() => setSuccess(null), 3000)
+    setTimeout(() => setSuccess(''), 3000)
   }
 
   const handleSave = async () => {
@@ -58,6 +58,8 @@ export default function ManageRestaurantPage() {
           whatsapp_number: data.restaurant.whatsapp_number,
           meta_phone_number_id: data.restaurant.meta_phone_number_id,
           is_active: data.restaurant.is_active,
+          plan: data.restaurant.plan,
+          monthly_booking_limit: data.restaurant.monthly_booking_limit,
           ...data.settings
         })
       })
@@ -114,11 +116,13 @@ export default function ManageRestaurantPage() {
 
   if (!data) return null
 
+  const isStarter = data.restaurant.plan === 'starter'
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-4 mb-10">
         <Link href="/admin" className="text-gray-500 hover:text-white transition text-sm">
-          ← Back to restaurants
+          &larr; Back to restaurants
         </Link>
       </div>
 
@@ -128,6 +132,13 @@ export default function ManageRestaurantPage() {
           <p className="text-gray-500 text-sm mt-1">{data.restaurant.slug}</p>
         </div>
         <div className="flex items-center gap-3">
+          <span className={`text-xs px-3 py-1.5 rounded-full border ${
+            data.restaurant.plan === 'growth'
+              ? 'bg-green-500/10 text-green-400 border-green-500/20'
+              : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+          }`}>
+            {data.restaurant.plan === 'growth' ? 'Growth' : 'Starter'}
+          </span>
           <span className={`text-xs px-3 py-1.5 rounded-full border ${
             data.restaurant.is_active
               ? 'bg-green-500/10 text-green-400 border-green-500/20'
@@ -140,7 +151,7 @@ export default function ManageRestaurantPage() {
 
       {success && (
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-green-400 text-sm mb-6">
-          ✓ {success}
+          &#10003; {success}
         </div>
       )}
       {error && (
@@ -199,6 +210,60 @@ export default function ManageRestaurantPage() {
           </div>
         </div>
 
+        {/* Plan management */}
+        <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6">
+          <h2 className="text-lg font-semibold mb-5">Plan management</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Current plan</label>
+              <select
+                value={data.restaurant.plan || 'growth'}
+                onChange={e => setData({ ...data, restaurant: { ...data.restaurant, plan: e.target.value, monthly_booking_limit: e.target.value === 'growth' ? null : (data.restaurant.monthly_booking_limit || 200) } })}
+                style={{ backgroundColor: '#0B0F14', color: 'white' }}
+                className="w-full border border-white/10 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500/50 transition"
+              >
+                <option value="starter" style={{ backgroundColor: '#0B0F14' }}>Starter — R599/month</option>
+                <option value="growth" style={{ backgroundColor: '#0B0F14' }}>Growth — R999/month</option>
+              </select>
+            </div>
+
+            {isStarter && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Monthly booking limit</label>
+                <input
+                  type="number"
+                  value={data.restaurant.monthly_booking_limit || 200}
+                  onChange={e => setData({ ...data, restaurant: { ...data.restaurant, monthly_booking_limit: parseInt(e.target.value) } })}
+                  min={1}
+                  className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
+                />
+                <p className="text-gray-600 text-xs mt-1">Maximum number of confirmed bookings per calendar month</p>
+              </div>
+            )}
+
+            {/* Current month usage */}
+            <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4">
+              <div className="text-sm text-gray-400 mb-1">Current month bookings</div>
+              <div className="text-2xl font-bold text-green-400">
+                {data.currentMonthBookings || 0}
+                {isStarter && data.restaurant.monthly_booking_limit && (
+                  <span className="text-base font-normal text-gray-500">
+                    {' '}/ {data.restaurant.monthly_booking_limit}
+                  </span>
+                )}
+              </div>
+              {isStarter && data.restaurant.monthly_booking_limit && (
+                <div className="mt-2 w-full bg-white/5 rounded-full h-1.5">
+                  <div
+                    className="bg-green-500 h-1.5 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, ((data.currentMonthBookings || 0) / data.restaurant.monthly_booking_limit) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Settings */}
         {data.settings && (
           <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6">
@@ -240,50 +305,17 @@ export default function ManageRestaurantPage() {
           {addingUser && (
             <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4 mb-4">
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <input
-                  type="text"
-                  placeholder="Name"
-                  value={newUser.name}
-                  onChange={e => setNewUser({ ...newUser, name: e.target.value })}
-                  className="bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none"
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={newUser.email}
-                  onChange={e => setNewUser({ ...newUser, email: e.target.value })}
-                  className="bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none"
-                />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={newUser.password}
-                  onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                  className="bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none"
-                />
-                <select
-                  value={newUser.role}
-                  onChange={e => setNewUser({ ...newUser, role: e.target.value })}
-                  style={{ backgroundColor: '#0B0F14', color: 'white' }}
-                  className="border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none"
-                >
+                <input type="text" placeholder="Name" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} className="bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none" />
+                <input type="email" placeholder="Email" value={newUser.email} onChange={e => setNewUser({ ...newUser, email: e.target.value })} className="bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none" />
+                <input type="password" placeholder="Password" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} className="bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none" />
+                <select value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} style={{ backgroundColor: '#0B0F14', color: 'white' }} className="border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none">
                   <option value="staff" style={{ backgroundColor: '#0B0F14' }}>Staff</option>
                   <option value="owner" style={{ backgroundColor: '#0B0F14' }}>Owner</option>
                 </select>
               </div>
               <div className="flex gap-2">
-                <button
-                  onClick={handleAddUser}
-                  className="text-sm bg-green-500 hover:bg-green-400 text-black font-semibold px-4 py-2 rounded-lg transition"
-                >
-                  Add user
-                </button>
-                <button
-                  onClick={() => setAddingUser(false)}
-                  className="text-sm text-gray-500 hover:text-white px-4 py-2 rounded-lg transition"
-                >
-                  Cancel
-                </button>
+                <button onClick={handleAddUser} className="text-sm bg-green-500 hover:bg-green-400 text-black font-semibold px-4 py-2 rounded-lg transition">Add user</button>
+                <button onClick={() => setAddingUser(false)} className="text-sm text-gray-500 hover:text-white px-4 py-2 rounded-lg transition">Cancel</button>
               </div>
             </div>
           )}
@@ -308,10 +340,7 @@ export default function ManageRestaurantPage() {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteUser(user.id)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition"
-                  >
+                  <button onClick={() => handleDeleteUser(user.id)} className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition">
                     Remove
                   </button>
                 </div>
