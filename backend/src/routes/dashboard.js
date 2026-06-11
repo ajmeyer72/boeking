@@ -512,8 +512,6 @@ router.put('/settings/hours', async (req, res) => {
 // PUT /dashboard/settings/config — update booking config
 // Replace the existing PUT /dashboard/settings/config route in backend/src/routes/dashboard.js with this:
 
-// Replace the existing PUT /dashboard/settings/config route in backend/src/routes/dashboard.js with this:
-
 router.put('/settings/config', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
@@ -528,6 +526,7 @@ router.put('/settings/config', async (req, res) => {
       bot_tone,
       reminder_1_hours,
       reminder_2_hours,
+      reminder_2_enabled,
       late_grace_mins,
       late_hold_mins,
       auto_noshow_mins,
@@ -548,13 +547,14 @@ router.put('/settings/config', async (req, res) => {
         bot_tone = $8,
         reminder_1_hours = $9,
         reminder_2_hours = $10,
-        late_grace_mins = $11,
-        late_hold_mins = $12,
-        auto_noshow_mins = $13,
-        late_notifications_enabled = $14,
-        booking_notifications_enabled = $15,
-        notification_number = $16
-       WHERE restaurant_id = $17`,
+        reminder_2_enabled = $11,
+        late_grace_mins = $12,
+        late_hold_mins = $13,
+        auto_noshow_mins = $14,
+        late_notifications_enabled = $15,
+        booking_notifications_enabled = $16,
+        notification_number = $17
+       WHERE restaurant_id = $18`,
       [
         slot_duration_mins,
         max_covers_per_slot,
@@ -566,6 +566,7 @@ router.put('/settings/config', async (req, res) => {
         bot_tone,
         reminder_1_hours || 24,
         reminder_2_hours || 2,
+        reminder_2_enabled !== undefined ? reminder_2_enabled : true,
         late_grace_mins || 15,
         late_hold_mins || 30,
         auto_noshow_mins || 45,
@@ -582,6 +583,7 @@ router.put('/settings/config', async (req, res) => {
     res.status(500).json({ error: 'Failed to update settings' })
   }
 })
+
 
 
 

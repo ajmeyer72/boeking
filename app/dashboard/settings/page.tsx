@@ -23,6 +23,7 @@ interface Config {
   bot_tone: string
   reminder_1_hours: number
   reminder_2_hours: number
+  reminder_2_enabled: boolean
   late_grace_mins: number
   late_hold_mins: number
   auto_noshow_mins: number
@@ -56,6 +57,7 @@ export default function SettingsPage() {
     bot_tone: 'friendly',
     reminder_1_hours: 24,
     reminder_2_hours: 2,
+    reminder_2_enabled: true,
     late_grace_mins: 15,
     late_hold_mins: 30,
     auto_noshow_mins: 45,
@@ -105,6 +107,7 @@ export default function SettingsPage() {
           bot_tone: data.settings.bot_tone || 'friendly',
           reminder_1_hours: data.settings.reminder_1_hours || 24,
           reminder_2_hours: data.settings.reminder_2_hours || 2,
+          reminder_2_enabled: data.settings.reminder_2_enabled !== false,
           late_grace_mins: data.settings.late_grace_mins || 15,
           late_hold_mins: data.settings.late_hold_mins || 30,
           auto_noshow_mins: data.settings.auto_noshow_mins || 45,
@@ -199,7 +202,7 @@ export default function SettingsPage() {
   }
 
   const updateHour = (dayIndex: number, field: keyof Hour, value: string | boolean) => {
-    setHours(prev => prev.map((h, i) => i === dayIndex ? { ...h, [field]: value } : h))
+    setHours((prev: Hour[]) => prev.map((h: Hour, i: number) => i === dayIndex ? { ...h, [field]: value } : h))
   }
 
   const timeOptions: string[] = []
@@ -265,12 +268,7 @@ export default function SettingsPage() {
                 <div className="col-span-3 text-sm font-medium text-gray-300">{DAYS[hour.day_of_week]}</div>
                 <div className="col-span-2 flex items-center">
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!hour.is_closed}
-                      onChange={e => updateHour(i, 'is_closed', !e.target.checked)}
-                      className="sr-only peer"
-                    />
+                    <input type="checkbox" checked={!hour.is_closed} onChange={e => updateHour(i, 'is_closed', !e.target.checked)} className="sr-only peer" />
                     <div className="w-9 h-5 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500" />
                   </label>
                   <span className="ml-2 text-xs text-gray-500">{hour.is_closed ? 'Closed' : 'Open'}</span>
@@ -278,23 +276,13 @@ export default function SettingsPage() {
                 {!hour.is_closed ? (
                   <>
                     <div className="col-span-3">
-                      <select
-                        value={hour.open_time}
-                        onChange={e => updateHour(i, 'open_time', e.target.value)}
-                        style={{ backgroundColor: '#0B0F14', color: 'white' }}
-                        className="w-full border border-white/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-green-500/50"
-                      >
+                      <select value={hour.open_time} onChange={e => updateHour(i, 'open_time', e.target.value)} style={{ backgroundColor: '#0B0F14', color: 'white' }} className="w-full border border-white/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-green-500/50">
                         {timeOptions.map(t => <option key={t} value={t} style={{ backgroundColor: '#0B0F14' }}>{t}</option>)}
                       </select>
                     </div>
                     <div className="col-span-1 text-center text-gray-600 text-sm">to</div>
                     <div className="col-span-3">
-                      <select
-                        value={hour.close_time}
-                        onChange={e => updateHour(i, 'close_time', e.target.value)}
-                        style={{ backgroundColor: '#0B0F14', color: 'white' }}
-                        className="w-full border border-white/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-green-500/50"
-                      >
+                      <select value={hour.close_time} onChange={e => updateHour(i, 'close_time', e.target.value)} style={{ backgroundColor: '#0B0F14', color: 'white' }} className="w-full border border-white/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-green-500/50">
                         {timeOptions.map(t => <option key={t} value={t} style={{ backgroundColor: '#0B0F14' }}>{t}</option>)}
                       </select>
                     </div>
@@ -434,18 +422,33 @@ export default function SettingsPage() {
             {/* Booking reminders */}
             <div>
               <h3 className="text-sm font-medium text-gray-300 mb-4">Booking reminders</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm text-gray-400 mb-2">First reminder (hours before)</label>
                   <input type="number" value={config.reminder_1_hours} onChange={e => setConfig({ ...config, reminder_1_hours: parseInt(e.target.value) })} min={1} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
                   <p className="text-gray-600 text-xs mt-1">Default: 24 hours before</p>
                 </div>
+              </div>
+
+              {/* 2hr reminder toggle */}
+              <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-4">
+                <div>
+                  <div className="text-sm font-medium text-gray-300">2-hour reminder</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Send a second reminder 2 hours before the reservation</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={config.reminder_2_enabled} onChange={e => setConfig({ ...config, reminder_2_enabled: e.target.checked })} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500" />
+                </label>
+              </div>
+
+              {config.reminder_2_enabled && (
                 <div>
                   <label className="block text-sm text-gray-400 mb-2">Second reminder (hours before)</label>
                   <input type="number" value={config.reminder_2_hours} onChange={e => setConfig({ ...config, reminder_2_hours: parseInt(e.target.value) })} min={1} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
                   <p className="text-gray-600 text-xs mt-1">Default: 2 hours before</p>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Late arrival notifications */}
@@ -509,9 +512,7 @@ export default function SettingsPage() {
                     placeholder="e.g. 27821234567"
                     className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
                   />
-                  <p className="text-gray-600 text-xs mt-1">
-                    The number that will receive a WhatsApp notification for every new booking. Include country code without + e.g. 27821234567
-                  </p>
+                  <p className="text-gray-600 text-xs mt-1">The number that will receive a WhatsApp notification for every new booking</p>
                 </div>
               )}
             </div>

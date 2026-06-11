@@ -24,7 +24,7 @@ const sendReminders = async () => {
     // Get all active restaurants with their reminder settings
     const restaurants = await pool.query(
       `SELECT DISTINCT ON (r.id) r.id, r.meta_phone_number_id,
-              rs.reminder_1_hours, rs.reminder_2_hours
+              rs.reminder_1_hours, rs.reminder_2_hours, rs.reminder_2_enabled
        FROM restaurants r
        JOIN restaurant_settings rs ON rs.restaurant_id = r.id
        WHERE r.is_active = true
@@ -34,6 +34,7 @@ const sendReminders = async () => {
     for (const restaurant of restaurants.rows) {
       const reminder1Hours = restaurant.reminder_1_hours || 24
       const reminder2Hours = restaurant.reminder_2_hours || 2
+      const reminder2Enabled = restaurant.reminder_2_enabled !== false
 
       // First reminder - only send after 11am
       if (parseInt(currentHour) >= 11) {
@@ -78,46 +79,50 @@ const sendReminders = async () => {
         console.log(`Skipping 24hr reminders - current hour is ${currentHour}:00, reminders start at 11:00`)
       }
 
-      // Second reminder
-      const secondReminder = await pool.query(
-        `SELECT r.*, c.whatsapp_number, c.name as customer_name
-         FROM reservations r
-         JOIN customers c ON c.id = r.customer_id
-         WHERE r.restaurant_id = $1
-         AND r.status = 'confirmed'
-         AND r.reservation_date = CURRENT_DATE
-         AND r.reservation_time BETWEEN
-           (NOW() AT TIME ZONE 'Africa/Johannesburg' + ($2 || ' hours')::INTERVAL)::time
-           AND (NOW() AT TIME ZONE 'Africa/Johannesburg' + ($2 || ' hours')::INTERVAL + INTERVAL '14 minutes')::time
-         AND NOT EXISTS (
-           SELECT 1 FROM notifications n
-           WHERE n.reservation_id = r.id
-           AND n.type = 'reminder_2hr'
-           AND n.status = 'sent'
-         )`,
-        [restaurant.id, reminder2Hours]
-      )
-
-      for (const reservation of secondReminder.rows) {
-        const name = reservation.customer_name || 'there'
-        const date = new Date(reservation.reservation_date).toLocaleDateString('en-ZA', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          timeZone: 'Africa/Johannesburg'
-        })
-        const time = reservation.reservation_time.slice(0, 5)
-        const party = reservation.party_size.toString()
-
-        await sendTemplate(
-          reservation.whatsapp_number,
-          '2hr_reminder',
-          [name, date, time, party],
-          restaurant.meta_phone_number_id
+      // Second reminder - only if enabled for this restaurant
+      if (reminder2Enabled) {
+        const secondReminder = await pool.query(
+          `SELECT r.*, c.whatsapp_number, c.name as customer_name
+           FROM reservations r
+           JOIN customers c ON c.id = r.customer_id
+           WHERE r.restaurant_id = $1
+           AND r.status = 'confirmed'
+           AND r.reservation_date = CURRENT_DATE
+           AND r.reservation_time BETWEEN
+             (NOW() AT TIME ZONE 'Africa/Johannesburg' + ($2 || ' hours')::INTERVAL)::time
+             AND (NOW() AT TIME ZONE 'Africa/Johannesburg' + ($2 || ' hours')::INTERVAL + INTERVAL '14 minutes')::time
+           AND NOT EXISTS (
+             SELECT 1 FROM notifications n
+             WHERE n.reservation_id = r.id
+             AND n.type = 'reminder_2hr'
+             AND n.status = 'sent'
+           )`,
+          [restaurant.id, reminder2Hours]
         )
 
-        await logNotification(reservation.id, 'reminder_2hr')
-        console.log(`2hr reminder sent to ${reservation.whatsapp_number}`)
+        for (const reservation of secondReminder.rows) {
+          const name = reservation.customer_name || 'there'
+          const date = new Date(reservation.reservation_date).toLocaleDateString('en-ZA', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            timeZone: 'Africa/Johannesburg'
+          })
+          const time = reservation.reservation_time.slice(0, 5)
+          const party = reservation.party_size.toString()
+
+          await sendTemplate(
+            reservation.whatsapp_number,
+            '2hr_reminder',
+            [name, date, time, party],
+            restaurant.meta_phone_number_id
+          )
+
+          await logNotification(reservation.id, 'reminder_2hr')
+          console.log(`2hr reminder sent to ${reservation.whatsapp_number}`)
+        }
+      } else {
+        console.log(`2hr reminder disabled for restaurant ${restaurant.id}`)
       }
     }
 
