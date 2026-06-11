@@ -280,13 +280,14 @@ export default function SettingsPage() {
   }
 
   const formatEventDate = (date: string) => {
-    return new Date(date + 'T12:00:00').toLocaleDateString('en-ZA', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
-  }
+  const clean = date.toString().split('T')[0]
+  return new Date(clean + 'T12:00:00').toLocaleDateString('en-ZA', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
+}
 
   const timeOptions: string[] = []
   for (let h = 7; h <= 24; h++) {
