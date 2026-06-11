@@ -992,5 +992,126 @@ if (cleanNumber.startsWith('0')) {
     res.status(500).json({ error: 'Failed to send WhatsApp message' })
   }
 })
+// Add these routes to backend/src/routes/dashboard.js before the module.exports line
+
+// GET /dashboard/events — get all special events
+router.get('/events', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+
+    const result = await pool.query(
+      `SELECT * FROM special_events
+       WHERE restaurant_id = $1
+       AND event_date >= CURRENT_DATE
+       AND is_active = true
+       ORDER BY event_date ASC, start_time ASC`,
+      [restaurantId]
+    )
+
+    res.json({ events: result.rows })
+  } catch (error) {
+    console.error('Events error:', error)
+    res.status(500).json({ error: 'Failed to fetch events' })
+  }
+})
+
+// POST /dashboard/events — create a special event
+router.post('/events', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { event_name, event_date, start_time, end_time, cover_charge, description } = req.body
+
+    if (!event_name || !event_date || !start_time || !end_time) {
+      return res.status(400).json({ error: 'Event name, date, start time and end time are required' })
+    }
+
+    const result = await pool.query(
+      `INSERT INTO special_events
+       (restaurant_id, event_name, event_date, start_time, end_time, cover_charge, description)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [restaurantId, event_name, event_date, start_time, end_time, cover_charge || null, description || null]
+    )
+
+    res.json({ event: result.rows[0] })
+  } catch (error) {
+    console.error('Create event error:', error)
+    res.status(500).json({ error: 'Failed to create event' })
+  }
+})
+
+// PUT /dashboard/events/:id — update a special event
+router.put('/events/:id', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+    const { event_name, event_date, start_time, end_time, cover_charge, description } = req.body
+
+    const result = await pool.query(
+      `UPDATE special_events
+       SET event_name = $1, event_date = $2, start_time = $3, end_time = $4,
+           cover_charge = $5, description = $6
+       WHERE id = $7 AND restaurant_id = $8
+       RETURNING *`,
+      [event_name, event_date, start_time, end_time, cover_charge || null, description || null, id, restaurantId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' })
+    }
+
+    res.json({ event: result.rows[0] })
+  } catch (error) {
+    console.error('Update event error:', error)
+    res.status(500).json({ error: 'Failed to update event' })
+  }
+})
+
+// DELETE /dashboard/events/:id — delete a special event
+router.delete('/events/:id', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
+
+    await pool.query(
+      `DELETE FROM special_events WHERE id = $1 AND restaurant_id = $2`,
+      [id, restaurantId]
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Delete event error:', error)
+    res.status(500).json({ error: 'Failed to delete event' })
+  }
+})
+
+// GET /dashboard/events/check?date=2026-06-04&time=19:00 — check if a date/time has a special event
+router.get('/events/check', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { date, time } = req.query
+
+    const result = await pool.query(
+      `SELECT * FROM special_events
+       WHERE restaurant_id = $1
+       AND event_date = $2
+       AND start_time <= $3
+       AND end_time >= $3
+       AND is_active = true
+       LIMIT 1`,
+      [restaurantId, date, time]
+    )
+
+    if (result.rows.length === 0) {
+      return res.json({ hasEvent: false })
+    }
+
+    res.json({ hasEvent: true, event: result.rows[0] })
+  } catch (error) {
+    console.error('Check event error:', error)
+    res.status(500).json({ error: 'Failed to check event' })
+  }
+})
+
 
 module.exports = router

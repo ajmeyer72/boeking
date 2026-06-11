@@ -38,12 +38,22 @@ interface BlockedDate {
   reason: string | null
 }
 
+interface SpecialEvent {
+  id: string
+  event_name: string
+  event_date: string
+  start_time: string
+  end_time: string
+  cover_charge: string | null
+  description: string | null
+}
+
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [activeSection, setActiveSection] = useState<'hours' | 'config' | 'blocked' | 'bot' | 'reminders'>('hours')
+  const [activeSection, setActiveSection] = useState<'hours' | 'config' | 'blocked' | 'bot' | 'reminders' | 'events'>('hours')
 
   const [hours, setHours] = useState<Hour[]>([])
   const [config, setConfig] = useState<Config>({
@@ -68,6 +78,16 @@ export default function SettingsPage() {
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([])
   const [newBlockedDate, setNewBlockedDate] = useState('')
   const [newBlockedReason, setNewBlockedReason] = useState('')
+  const [specialEvents, setSpecialEvents] = useState<SpecialEvent[]>([])
+  const [showAddEvent, setShowAddEvent] = useState(false)
+  const [newEvent, setNewEvent] = useState({
+    event_name: '',
+    event_date: '',
+    start_time: '',
+    end_time: '',
+    cover_charge: '',
+    description: ''
+  })
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('boeking_token') : null
   const base = process.env.NEXT_PUBLIC_API_URL
@@ -123,7 +143,22 @@ export default function SettingsPage() {
     }
   }
 
-  useEffect(() => { fetchSettings() }, [])
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch(`${base}/dashboard/events`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      setSpecialEvents(data.events || [])
+    } catch (err) {
+      console.error('Failed to fetch events:', err)
+    }
+  }
+
+  useEffect(() => {
+    fetchSettings()
+    fetchEvents()
+  }, [])
 
   const showSuccess = (msg: string) => {
     setSuccess(msg)
@@ -201,8 +236,56 @@ export default function SettingsPage() {
     }
   }
 
+  const addEvent = async () => {
+    if (!newEvent.event_name || !newEvent.event_date || !newEvent.start_time || !newEvent.end_time) {
+      setError('Event name, date, start time and end time are required')
+      return
+    }
+    setSaving('events')
+    setError(null)
+    try {
+      const res = await fetch(`${base}/dashboard/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(newEvent)
+      })
+      if (!res.ok) throw new Error()
+      setNewEvent({ event_name: '', event_date: '', start_time: '', end_time: '', cover_charge: '', description: '' })
+      setShowAddEvent(false)
+      fetchEvents()
+      showSuccess('Event added')
+    } catch {
+      setError('Failed to add event')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const deleteEvent = async (id: string) => {
+    if (!confirm('Delete this event?')) return
+    try {
+      await fetch(`${base}/dashboard/events/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      fetchEvents()
+      showSuccess('Event deleted')
+    } catch {
+      setError('Failed to delete event')
+    }
+  }
+
   const updateHour = (dayIndex: number, field: keyof Hour, value: string | boolean) => {
     setHours((prev: Hour[]) => prev.map((h: Hour, i: number) => i === dayIndex ? { ...h, [field]: value } : h))
+  }
+
+  const formatEventDate = (date: string) => {
+    return new Date(date + 'T12:00:00').toLocaleDateString('en-ZA', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    })
   }
 
   const timeOptions: string[] = []
@@ -248,10 +331,11 @@ export default function SettingsPage() {
           { key: 'blocked', label: 'Blocked dates' },
           { key: 'bot', label: 'Bot customisation' },
           { key: 'reminders', label: 'Reminders' },
+          { key: 'events', label: 'Special events' },
         ].map(section => (
           <button
             key={section.key}
-            onClick={() => setActiveSection(section.key as 'hours' | 'config' | 'blocked' | 'bot' | 'reminders')}
+            onClick={() => setActiveSection(section.key as 'hours' | 'config' | 'blocked' | 'bot' | 'reminders' | 'events')}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition ${activeSection === section.key ? 'bg-green-500 text-black' : 'bg-white/5 text-gray-400 hover:text-white'}`}
           >
             {section.label}
@@ -418,8 +502,6 @@ export default function SettingsPage() {
           <p className="text-gray-500 text-sm mb-6">Configure when reminders and notifications are sent</p>
 
           <div className="space-y-6">
-
-            {/* Booking reminders */}
             <div>
               <h3 className="text-sm font-medium text-gray-300 mb-4">Booking reminders</h3>
               <div className="grid grid-cols-2 gap-4 mb-4">
@@ -430,7 +512,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* 2hr reminder toggle */}
               <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-4">
                 <div>
                   <div className="text-sm font-medium text-gray-300">2-hour reminder</div>
@@ -451,7 +532,6 @@ export default function SettingsPage() {
               )}
             </div>
 
-            {/* Late arrival notifications */}
             <div className="border-t border-white/5 pt-6">
               <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-4">
                 <div>
@@ -485,7 +565,6 @@ export default function SettingsPage() {
               )}
             </div>
 
-            {/* New booking notifications */}
             <div className="border-t border-white/5 pt-6">
               <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-xl mb-4">
                 <div>
@@ -516,12 +595,158 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
-
           </div>
 
           <button onClick={saveConfig} disabled={saving === 'config'} className="mt-6 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-6 py-2.5 rounded-xl transition text-sm">
             {saving === 'config' ? 'Saving...' : 'Save reminder settings'}
           </button>
+        </div>
+      )}
+
+      {activeSection === 'events' && (
+        <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold">Special events</h2>
+            <button
+              onClick={() => setShowAddEvent(!showAddEvent)}
+              className="text-sm px-4 py-2 rounded-xl bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 transition"
+            >
+              + Add event
+            </button>
+          </div>
+          <p className="text-gray-500 text-sm mb-6">
+            Add special events like jazz nights or theme dinners. Customers will be informed of the event and cover charge when booking for that time.
+          </p>
+
+          {/* Add event form */}
+          {showAddEvent && (
+            <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5 mb-6">
+              <h3 className="text-sm font-medium text-gray-300 mb-4">New special event</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Event name <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    value={newEvent.event_name}
+                    onChange={e => setNewEvent({ ...newEvent, event_name: e.target.value })}
+                    placeholder="e.g. Jazz Evening with The Blue Notes"
+                    className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Date <span className="text-red-400">*</span></label>
+                    <input
+                      type="date"
+                      value={newEvent.event_date}
+                      onChange={e => setNewEvent({ ...newEvent, event_date: e.target.value })}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500/50 transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Start time <span className="text-red-400">*</span></label>
+                    <select
+                      value={newEvent.start_time}
+                      onChange={e => setNewEvent({ ...newEvent, start_time: e.target.value })}
+                      style={{ backgroundColor: '#0B0F14', color: 'white' }}
+                      className="w-full border border-white/10 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-500/50"
+                    >
+                      <option value="" style={{ backgroundColor: '#0B0F14' }}>Select</option>
+                      {timeOptions.map(t => <option key={t} value={t} style={{ backgroundColor: '#0B0F14' }}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">End time <span className="text-red-400">*</span></label>
+                    <select
+                      value={newEvent.end_time}
+                      onChange={e => setNewEvent({ ...newEvent, end_time: e.target.value })}
+                      style={{ backgroundColor: '#0B0F14', color: 'white' }}
+                      className="w-full border border-white/10 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-500/50"
+                    >
+                      <option value="" style={{ backgroundColor: '#0B0F14' }}>Select</option>
+                      {timeOptions.map(t => <option key={t} value={t} style={{ backgroundColor: '#0B0F14' }}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Cover charge (R) — leave blank if no charge</label>
+                  <input
+                    type="number"
+                    value={newEvent.cover_charge}
+                    onChange={e => setNewEvent({ ...newEvent, cover_charge: e.target.value })}
+                    placeholder="e.g. 150"
+                    min={0}
+                    className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Description (optional)</label>
+                  <textarea
+                    value={newEvent.description}
+                    onChange={e => setNewEvent({ ...newEvent, description: e.target.value })}
+                    rows={2}
+                    placeholder="e.g. Live jazz from 19:00 to 22:00. Smart casual dress code."
+                    className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition resize-none"
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={addEvent}
+                    disabled={saving === 'events'}
+                    className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-lg text-sm transition"
+                  >
+                    {saving === 'events' ? 'Adding...' : 'Add event'}
+                  </button>
+                  <button
+                    onClick={() => setShowAddEvent(false)}
+                    className="text-sm text-gray-500 hover:text-white px-4 py-2 rounded-lg transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Events list */}
+          {specialEvents.length === 0 ? (
+            <div className="text-center py-10 text-gray-600 text-sm">
+              No special events scheduled
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {specialEvents.map(event => (
+                <div key={event.id} className="bg-white/[0.02] border border-white/5 rounded-xl px-5 py-4 flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="text-white font-medium">{event.event_name}</span>
+                      {event.cover_charge && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                          R{parseFloat(event.cover_charge).toFixed(0)} cover charge
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {formatEventDate(event.event_date)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {event.start_time.slice(0, 5)} — {event.end_time.slice(0, 5)}
+                    </div>
+                    {event.description && (
+                      <div className="text-xs text-gray-600 mt-1">{event.description}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => deleteEvent(event.id)}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition flex-shrink-0 ml-4"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

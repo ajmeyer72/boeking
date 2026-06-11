@@ -11,7 +11,7 @@ const pool = new Pool({
 
 const getRestaurantSettings = async (restaurantId) => {
   const result = await pool.query(
-    `SELECT 
+    `SELECT
       r.name as restaurant_name,
       rs.greeting_message,
       rs.restaurant_display_name,
@@ -29,6 +29,29 @@ const getRestaurantSettings = async (restaurantId) => {
   return result.rows[0] || {}
 }
 
+const getSpecialEvent = async (restaurantId, date, time) => {
+  if (!date || !time) return null
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM special_events
+       WHERE restaurant_id = $1
+       AND event_date = $2
+       AND start_time <= $3::time
+       AND end_time >= $3::time
+       AND is_active = true
+       LIMIT 1`,
+      [restaurantId, date, time]
+    )
+
+    if (result.rows.length === 0) return null
+    return result.rows[0]
+  } catch (error) {
+    console.error('Error fetching special event:', error)
+    return null
+  }
+}
+
 const getToneInstructions = (tone) => {
   switch (tone) {
     case 'formal':
@@ -41,7 +64,6 @@ const getToneInstructions = (tone) => {
 }
 
 const getSystemPrompt = (settings = {}, availabilityContext = '', existingBookingContext = '') => {
-  const now = new Date()
   const today = new Date().toLocaleDateString('en-ZA', {
     weekday: 'long',
     year: 'numeric',
@@ -49,17 +71,19 @@ const getSystemPrompt = (settings = {}, availabilityContext = '', existingBookin
     day: 'numeric',
     timeZone: 'Africa/Johannesburg'
   })
-// Pre-calculate next 14 days so Claude has accurate day names
-const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const upcomingDates = []
-for (let i = 1; i <= 14; i++) {
-  const d = new Date(now)
-  d.setDate(d.getDate() + i)
-  const dateStr = d.toISOString().split('T')[0]
-  const dayName = dayNames[d.getDay()]
-  upcomingDates.push(`${dateStr} = ${dayName} ${d.getDate()} ${d.toLocaleDateString('en-ZA', { month: 'long' })}`)
-}
-const dateReference = upcomingDates.join('\n')
+
+  const now = new Date()
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const upcomingDates = []
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date(now)
+    d.setDate(d.getDate() + i)
+    const dateStr = d.toISOString().split('T')[0]
+    const dayName = dayNames[d.getDay()]
+    upcomingDates.push(`${dateStr} = ${dayName} ${d.getDate()} ${d.toLocaleDateString('en-ZA', { month: 'long' })}`)
+  }
+  const dateReference = upcomingDates.join('\n')
+
   const restaurantName = settings.restaurant_display_name || settings.restaurant_name || 'our restaurant'
   const tone = getToneInstructions(settings.bot_tone)
   const greeting = settings.greeting_message
@@ -68,7 +92,8 @@ const dateReference = upcomingDates.join('\n')
 
   return `You are a reservation assistant for ${restaurantName}, handling table bookings via WhatsApp.
 
-Today's date is ${today}. Use this to correctly interpret relative dates like "next Monday" or "this Sunday".
+Today's date is ${today}.
+
 IMPORTANT DATE REFERENCE — use these exact day names, do not calculate yourself:
 ${dateReference}
 
@@ -101,20 +126,28 @@ Rules:
 - Always confirm booking details before finalising
 - Reply in the same language the customer uses
 
+SPECIAL EVENTS:
+- If the availability result mentions a special event, always inform the customer clearly
+- Mention the event name and cover charge before asking for confirmation
+- Be positive and enthusiastic about the event
+- Make sure the customer explicitly confirms they are happy to proceed knowing about the cover charge
+- Include the event name and cover charge in the booking summary
+
 CANCELLATION HANDLING:
 - If the customer wants to cancel, confirm their booking details and ask them to confirm the cancellation
 - Once they confirm, send a warm message and end with BOOKING_CANCELLED on a new line
-WAITING LIST HANDLING:
-- If a slot is fully booked, offer to add the customer to the waiting list
-- Ask: "We're fully booked at that time. Would you like to be added to the waiting list? If a spot opens up we'll message you straight away."
-- If they say yes, collect any missing details (date, time, party size) then end your reply with:
-ADD_TO_WAITLIST: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>, requests=<details or none>
-- Confirm to the customer they've been added: "You're on the waiting list for [date] at [time]. We'll be in touch if a table becomes available! 🤞"
 
 MODIFICATION HANDLING:
 - If the customer wants to modify, collect the new details
 - Before confirming, include a CHECK_AVAILABILITY tag
 - Format: CHECK_AVAILABILITY: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>
+
+WAITING LIST HANDLING:
+- If a slot is fully booked, offer to add the customer to the waiting list
+- Ask: "We are fully booked at that time. Would you like to be added to the waiting list? If a spot opens up we will message you straight away."
+- If they say yes, collect any missing details then end your reply with:
+ADD_TO_WAITLIST: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>, requests=<details or none>
+- Confirm to the customer they have been added
 
 When the customer confirms a new booking or modification, you MUST end your reply with this exact tag on a new line:
 BOOKING_CONFIRMED: date=<YYYY-MM-DD>, time=<HH:MM>, party=<number>, name=<full name>, requests=<details or none>
@@ -153,7 +186,6 @@ const processWithAI = async (userMessage, conversation) => {
   const history = await getConversationHistory(conversation.id)
   const messages = history.length > 0 ? history : [{ role: 'user', content: userMessage }]
 
-  // Load restaurant settings
   const settings = await getRestaurantSettings(conversation.restaurant_id)
   console.log('Restaurant settings loaded:', {
     name: settings.restaurant_display_name || settings.restaurant_name,
@@ -161,7 +193,6 @@ const processWithAI = async (userMessage, conversation) => {
     hasGreeting: !!settings.greeting_message
   })
 
-  // Build existing booking context
   let existingBookingContext = ''
   const contextData = conversation.context_data || {}
   if (contextData.existingBooking) {
@@ -186,7 +217,6 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
   let reply = response.content[0].text
   console.log('Initial AI reply:', reply)
 
-  // Check if Claude wants to check availability
   const availabilityRequest = parseCheckAvailability(reply)
 
   if (availabilityRequest) {
@@ -214,21 +244,38 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
           availabilityRequest.party
         )
 
+        // Check for special event at this date/time
+        const specialEvent = await getSpecialEvent(
+          conversation.restaurant_id,
+          availabilityRequest.date,
+          availabilityRequest.time
+        )
+
+        let eventContext = ''
+        if (specialEvent) {
+          const coverCharge = specialEvent.cover_charge
+            ? `R${parseFloat(specialEvent.cover_charge).toFixed(0)} cover charge per person applies`
+            : 'no cover charge'
+
+          eventContext = ` SPECIAL EVENT: "${specialEvent.event_name}" is on at this time — ${coverCharge}.${specialEvent.description ? ` ${specialEvent.description}` : ''} Inform the customer about this event and cover charge before confirming.`
+
+          console.log('Special event found:', specialEvent.event_name)
+        }
+
         if (!availability.available) {
           if (availability.alternatives?.length > 0) {
-            availabilityResult = `AVAILABILITY RESULT: Fully booked at ${availabilityRequest.time}. Available alternatives: ${availability.alternatives.join(', ')}.`
+            availabilityResult = `AVAILABILITY RESULT: Fully booked at ${availabilityRequest.time}. Available alternatives: ${availability.alternatives.join(', ')}.${eventContext}`
           } else {
-            availabilityResult = `AVAILABILITY RESULT: Not available — ${availability.message}`
+            availabilityResult = `AVAILABILITY RESULT: Not available — ${availability.message}${eventContext}`
           }
         } else {
-          availabilityResult = `AVAILABILITY RESULT: Available — slot confirmed for ${availabilityRequest.date} at ${availabilityRequest.time} for ${availabilityRequest.party} guests.`
+          availabilityResult = `AVAILABILITY RESULT: Available — slot confirmed for ${availabilityRequest.date} at ${availabilityRequest.time} for ${availabilityRequest.party} guests.${eventContext}`
         }
       }
     }
 
     console.log('Availability result:', availabilityResult)
 
-    // Second pass with availability result
     const messagesWithAvailability = [
       ...messages,
       { role: 'assistant', content: reply },
@@ -254,11 +301,11 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
   }
 
   const cleanReply = reply
-  .replace(/\nCHECK_AVAILABILITY:.*$/m, '')
-  .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
-  .replace(/\nBOOKING_CANCELLED.*$/s, '')
-  .replace(/\nADD_TO_WAITLIST:.*$/s, '')
-  .trim()
+    .replace(/\nCHECK_AVAILABILITY:.*$/m, '')
+    .replace(/\nBOOKING_CONFIRMED:.*$/s, '')
+    .replace(/\nBOOKING_CANCELLED.*$/s, '')
+    .replace(/\nADD_TO_WAITLIST:.*$/s, '')
+    .trim()
 
   return { reply: cleanReply, newState, rawReply: reply }
 }
