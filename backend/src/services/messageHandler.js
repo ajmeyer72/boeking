@@ -30,7 +30,7 @@ const getOrCreateConversation = async (from, metaPhoneNumberId) => {
      LEFT JOIN restaurants r ON r.id = c.restaurant_id
      WHERE c.whatsapp_thread_id = $1
      AND c.restaurant_id = $2
-     AND c.state IN ('in_progress', 'confirmed', 'closed')
+     AND c.state IN ('in_progress', 'confirmed')
      ORDER BY c.last_message_at DESC
      LIMIT 1`,
     [from, restaurantId]
@@ -283,11 +283,30 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
       return
     }
 
-    // If conversation is closed reset to new
-    if (conversation.state === 'closed') {
-      await updateConversationState(conversation.id, 'new')
-      console.log('Closed conversation reset to new')
-    }
+    // If conversation is closed start a brand new conversation
+// so the AI has a clean slate
+if (conversation.state === 'closed') {
+  console.log('Closed conversation — starting fresh')
+  // Create a new conversation instead of reusing the old one
+  const newConv = await pool.query(
+    `INSERT INTO conversations
+     (restaurant_id, customer_id, whatsapp_thread_id, state, context_data)
+     VALUES ($1, $2, $3, 'new', $4)
+     RETURNING *`,
+    [
+      conversation.restaurant_id,
+      conversation.customer_id,
+      conversation.whatsapp_thread_id,
+      JSON.stringify({ customerName: conversation.customer_name || null })
+    ]
+  )
+  // Use the new conversation from here
+  Object.assign(conversation, {
+    ...newConv.rows[0],
+    meta_phone_number_id: conversation.meta_phone_number_id,
+    customer_name: conversation.customer_name
+  })
+}
 
     // Check if this is a waiting list response
     const waitingListResponse = await handleWaitingListResponse(
