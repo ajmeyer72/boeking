@@ -1,4 +1,4 @@
-const { sendMessage } = require('./metaService')
+const { sendMessage, sendTemplate } = require('./metaService')
 const { processWithAI } = require('./aiService')
 const { Pool } = require('pg')
 const { addToWaitingList, handleWaitingListResponse } = require('./waitingListService')
@@ -128,9 +128,27 @@ const sendBookingNotification = async (restaurantId, bookingDetails, customerNam
       cleanNumber = '27' + cleanNumber.slice(1)
     }
 
-    const message = `New booking received!\n\n👤 ${customerName || 'Unknown'}\n📅 ${bookingDetails.date}\n🕕 ${bookingDetails.time}\n👥 ${bookingDetails.party} ${parseInt(bookingDetails.party) === 1 ? 'guest' : 'guests'}${bookingDetails.requests && bookingDetails.requests !== 'none' ? `\n✨ ${bookingDetails.requests}` : ''}\n\nLogin to your dashboard to view all bookings.`
+    const date = new Date(bookingDetails.date).toLocaleDateString('en-ZA', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      timeZone: 'Africa/Johannesburg'
+    })
 
-    await sendMessage(cleanNumber, message, phoneNumberId)
+    // Use new_booking_notification template
+    await sendTemplate(
+      cleanNumber,
+      'new_booking_notification',
+      [
+        customerName || 'Unknown',
+        date,
+        bookingDetails.time,
+        bookingDetails.party,
+        bookingDetails.requests && bookingDetails.requests !== 'none' ? bookingDetails.requests : 'None'
+      ],
+      phoneNumberId
+    )
+
     console.log(`Booking notification sent to ${cleanNumber}`)
   } catch (error) {
     console.error('Failed to send booking notification:', error)
@@ -240,9 +258,9 @@ const parseBookingDetails = (reply) => {
 
 const getClosingMessage = () => {
   const messages = [
-    "You're welcome! We look forward to seeing you. If you need to make any changes to your booking, just let us know! 😊",
-    "It's our pleasure! See you soon. Feel free to message us if you need anything. 😊",
-    "Thank you! We can't wait to welcome you. If anything changes, just send us a message. 😊"
+    "You're welcome! We look forward to seeing you. If you need to make any changes to your booking, just let us know!",
+    "It's our pleasure! See you soon. Feel free to message us if you need anything.",
+    "Thank you! We can't wait to welcome you. If anything changes, just send us a message."
   ]
   return messages[Math.floor(Math.random() * messages.length)]
 }
@@ -308,7 +326,7 @@ const handleIncomingMessage = async (from, text, metaPhoneNumberId) => {
         await saveReservation(conversation, bookingDetails)
         console.log('Reservation saved successfully')
 
-        // Send booking notification to restaurant
+        // Send booking notification to restaurant using template
         await sendBookingNotification(
           conversation.restaurant_id,
           bookingDetails,

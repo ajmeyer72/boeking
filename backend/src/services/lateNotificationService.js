@@ -1,5 +1,5 @@
 const { Pool } = require('pg')
-const { sendMessage } = require('./metaService')
+const { sendTemplate } = require('./metaService')
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -10,32 +10,25 @@ const checkLateCustomers = async () => {
   console.log('Checking for late customers...')
 
   try {
-    // Get all active restaurants with late notifications enabled
     const restaurants = await pool.query(
-  `SELECT DISTINCT ON (r.id) r.id, r.meta_phone_number_id,
-          rs.late_grace_mins, rs.late_hold_mins, rs.auto_noshow_mins,
-          rs.late_notifications_enabled
-   FROM restaurants r
-   JOIN restaurant_settings rs ON rs.restaurant_id = r.id
-   WHERE r.is_active = true
-   AND rs.late_notifications_enabled = true
-   ORDER BY r.id`
-)
+      `SELECT DISTINCT ON (r.id) r.id, r.meta_phone_number_id,
+              rs.late_grace_mins, rs.late_hold_mins, rs.auto_noshow_mins,
+              rs.late_notifications_enabled
+       FROM restaurants r
+       JOIN restaurant_settings rs ON rs.restaurant_id = r.id
+       WHERE r.is_active = true
+       AND rs.late_notifications_enabled = true
+       ORDER BY r.id`
+    )
 
-    console.log('Restaurants to check:', restaurants.rows.length, restaurants.rows.map(r => r.id))
+    console.log('Restaurants to check:', restaurants.rows.length)
 
     for (const restaurant of restaurants.rows) {
       const graceMins = restaurant.late_grace_mins || 15
       const autoNoshowMins = restaurant.auto_noshow_mins || 45
+      const holdMins = restaurant.late_hold_mins || 30
 
-      console.log(`Checking restaurant ${restaurant.id} — grace: ${graceMins} mins, auto noshow: ${autoNoshowMins} mins`)
-
-      // Current SA time for comparison
-      const nowResult = await pool.query(
-        `SELECT (NOW() AT TIME ZONE 'Africa/Johannesburg')::time as sa_time`
-      )
-      const saTime = nowResult.rows[0].sa_time
-      console.log('Current SA time:', saTime)
+      console.log(`Checking restaurant ${restaurant.id} — grace: ${graceMins} mins`)
 
       // Find reservations past grace period that have not arrived
       const lateReservations = await pool.query(
@@ -55,14 +48,16 @@ const checkLateCustomers = async () => {
       console.log('Late reservations found:', lateReservations.rows.length)
 
       for (const reservation of lateReservations.rows) {
-        console.log('Processing late reservation:', reservation.id, 'time:', reservation.reservation_time)
-        const holdMins = restaurant.late_hold_mins || 30
         const name = reservation.customer_name || 'there'
         const time = reservation.reservation_time.slice(0, 5)
 
-        const message = `Hi ${name}! We have your table ready at ${time} but have not seen you yet.\n\nShall we hold your table for another ${holdMins} minutes?\n\nReply YES to hold your table or NO to cancel your reservation.`
-
-        await sendMessage(reservation.whatsapp_number, message, restaurant.meta_phone_number_id)
+        // Use late_arrival_notification template
+        await sendTemplate(
+          reservation.whatsapp_number,
+          'late_arrival_notification',
+          [name, time, holdMins.toString()],
+          restaurant.meta_phone_number_id
+        )
 
         await pool.query(
           `UPDATE reservations
@@ -92,8 +87,6 @@ const checkLateCustomers = async () => {
       console.log('Auto no-show candidates:', autoNoshow.rows.length)
 
       for (const reservation of autoNoshow.rows) {
-        console.log('Auto no-show:', reservation.id)
-
         await pool.query(
           `UPDATE reservations SET status = 'no_show', updated_at = NOW() WHERE id = $1`,
           [reservation.id]

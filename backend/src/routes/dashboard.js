@@ -278,6 +278,9 @@ router.get('/availability', async (req, res) => {
 })
 
 // POST /dashboard/bookings — create manual booking
+// In backend/src/routes/dashboard.js
+// Find the existing POST /dashboard/bookings route and replace it with this:
+
 router.post('/bookings', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
@@ -290,19 +293,20 @@ router.post('/bookings', async (req, res) => {
       special_requests
     } = req.body
 
-    if (!customer_name || !whatsapp_number || !reservation_date || !reservation_time || !party_size) {
-      return res.status(400).json({ error: 'All fields except special requests are required' })
+    if (!whatsapp_number || !reservation_date || !reservation_time || !party_size) {
+      return res.status(400).json({ error: 'Missing required fields' })
     }
 
-    // Clean phone number — remove spaces and ensure it starts with country code
-    const cleanPhone = whatsapp_number.replace(/\s/g, '').replace(/^\+/, '')
+    // Clean the number
+    let cleanNumber = whatsapp_number.replace(/[\s\-\+]/g, '')
+    if (cleanNumber.startsWith('0')) {
+      cleanNumber = '27' + cleanNumber.slice(1)
+    }
 
     // Find or create customer
     let customer = await pool.query(
-      `SELECT * FROM customers
-       WHERE whatsapp_number = $1
-       AND restaurant_id = $2`,
-      [cleanPhone, restaurantId]
+      `SELECT * FROM customers WHERE whatsapp_number = $1 AND restaurant_id = $2`,
+      [cleanNumber, restaurantId]
     )
 
     if (customer.rows.length === 0) {
@@ -310,10 +314,9 @@ router.post('/bookings', async (req, res) => {
         `INSERT INTO customers (restaurant_id, whatsapp_number, name)
          VALUES ($1, $2, $3)
          RETURNING *`,
-        [restaurantId, cleanPhone, customer_name]
+        [restaurantId, cleanNumber, customer_name || null]
       )
-    } else {
-      // Update name if provided
+    } else if (customer_name && !customer.rows[0].name) {
       await pool.query(
         `UPDATE customers SET name = $1 WHERE id = $2`,
         [customer_name, customer.rows[0].id]
@@ -328,14 +331,7 @@ router.post('/bookings', async (req, res) => {
        (restaurant_id, customer_id, reservation_date, reservation_time, party_size, special_requests, status)
        VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')
        RETURNING *`,
-      [
-        restaurantId,
-        customerId,
-        reservation_date,
-        reservation_time,
-        parseInt(party_size),
-        special_requests || null
-      ]
+      [restaurantId, customerId, reservation_date, reservation_time, parseInt(party_size), special_requests || null]
     )
 
     // Update customer total bookings
@@ -344,26 +340,67 @@ router.post('/bookings', async (req, res) => {
       [customerId]
     )
 
-    // Schedule notifications
-    await pool.query(
-      `INSERT INTO notifications (reservation_id, type, status, scheduled_for)
-       VALUES 
-         ($1, 'reminder_24hr', 'pending', $2::date - INTERVAL '1 day'),
-         ($1, 'reminder_2hr', 'pending', $2::timestamp - INTERVAL '2 hours')`,
-      [reservation.rows[0].id, `${reservation_date}T${reservation_time}`]
+    // Get restaurant details for the confirmation message
+    const restaurant = await pool.query(
+      `SELECT r.meta_phone_number_id, rs.restaurant_display_name, r.name
+       FROM restaurants r
+       JOIN restaurant_settings rs ON rs.restaurant_id = r.id
+       WHERE r.id = $1`,
+      [restaurantId]
     )
 
-    res.json({
-      success: true,
-      reservation: reservation.rows[0],
-      message: `Booking confirmed for ${customer_name} on ${reservation_date} at ${reservation_time}`
+    const { meta_phone_number_id, restaurant_display_name, name: restaurantName } = restaurant.rows[0]
+    const displayName = restaurant_display_name || restaurantName
+
+    // Format date for confirmation message
+    const formattedDate = new Date(reservation_date).toLocaleDateString('en-ZA', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      timeZone: 'Africa/Johannesburg'
     })
 
+    const formattedTime = reservation_time.slice(0, 5)
+    const customerDisplayName = customer_name || 'there'
+
+    // Send booking confirmation template
+    const { sendTemplate } = require('../services/metaService')
+    await sendTemplate(
+      cleanNumber,
+      'booking_confirmation',
+      [
+        customerDisplayName,
+        displayName,
+        formattedDate,
+        formattedTime,
+        party_size.toString()
+      ],
+      meta_phone_number_id
+    )
+
+    console.log(`Booking confirmation sent to ${cleanNumber}`)
+
+    // Send booking notification to restaurant if enabled
+    const { sendBookingNotification } = require('../services/messageHandler')
+    await sendBookingNotification(
+      restaurantId,
+      {
+        date: reservation_date,
+        time: formattedTime,
+        party: party_size.toString(),
+        requests: special_requests || 'none'
+      },
+      customer_name,
+      meta_phone_number_id
+    )
+
+    res.json({ reservation: reservation.rows[0] })
   } catch (error) {
-    console.error('Manual booking error:', error)
+    console.error('Create booking error:', error)
     res.status(500).json({ error: 'Failed to create booking' })
   }
 })
+
 // GET /dashboard/calendar?month=2026-06 — bookings for a full month
 router.get('/calendar', async (req, res) => {
   try {
