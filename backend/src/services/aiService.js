@@ -63,7 +63,7 @@ const getToneInstructions = (tone) => {
   }
 }
 
-const getSystemPrompt = (settings = {}, availabilityContext = '', existingBookingContext = '') => {
+const getSystemPrompt = (settings = {}, availabilityContext = '', customerContext = '') => {
   const today = new Date().toLocaleDateString('en-ZA', {
     weekday: 'long',
     year: 'numeric',
@@ -101,7 +101,7 @@ TONE: ${tone}
 
 GREETING: ${greeting}
 
-${existingBookingContext}
+${customerContext}
 
 Your job is to help customers make, modify or cancel table reservations.
 
@@ -109,7 +109,7 @@ If there is no existing booking, collect the following in a natural conversation
 1. Preferred date (always confirm the actual calendar date e.g. "Just to confirm, that's Monday 2 June 2026 — correct?")
 2. Preferred time
 3. Party size
-4. Customer name
+4. Customer name — ONLY ask for the name if you do not already know it from the context above
 5. Any special requests (optional)
 
 ${availabilityContext}
@@ -120,7 +120,9 @@ Rules:
 - Be concise — this is WhatsApp, not email
 - Ask one question at a time
 - Never ask for information the customer has already provided
+- Never ask for the customer name if it is already known from the context
 - Always confirm the actual calendar date when customer uses relative terms
+- Use ONLY the date reference above to determine day names — NEVER calculate day names yourself
 - If a slot is unavailable, suggest the alternatives provided naturally
 - If the customer says something unclear, politely ask again
 - Always confirm booking details before finalising
@@ -128,13 +130,11 @@ Rules:
 
 SPECIAL EVENTS:
 - If the availability result mentions a special event, always inform the customer clearly
+- Use ONLY the date reference above to determine the day name — NEVER calculate day names yourself
 - Mention the event name and cover charge before asking for confirmation
 - Be positive and enthusiastic about the event
 - Make sure the customer explicitly confirms they are happy to proceed knowing about the cover charge
 - Include the event name and cover charge in the booking summary
-- If the availability result mentions a special event, always inform the customer clearly
-- Use ONLY the date reference above to determine the day name — NEVER calculate day names yourself
-- Mention the event name and cover charge before asking for confirmation
 
 CANCELLATION HANDLING:
 - If the customer wants to cancel, confirm their booking details and ask them to confirm the cancellation
@@ -196,24 +196,29 @@ const processWithAI = async (userMessage, conversation) => {
     hasGreeting: !!settings.greeting_message
   })
 
-  let existingBookingContext = ''
+  // Build customer context — existing booking or returning customer
+  let customerContext = ''
   const contextData = conversation.context_data || {}
+
   if (contextData.existingBooking) {
     const b = contextData.existingBooking
     const name = contextData.customerName || 'valued customer'
-    existingBookingContext = `EXISTING BOOKING: This customer (${name}) has a confirmed reservation:
+    customerContext = `EXISTING BOOKING: This customer (${name}) has a confirmed reservation:
 - Date: ${b.reservation_date}
 - Time: ${b.reservation_time}
 - Party size: ${b.party_size}
 - Special requests: ${b.special_requests || 'none'}
 Greet them by name and show these details. Ask if they want to modify, cancel, or make a new booking.`
+  } else if (contextData.customerName) {
+    customerContext = `RETURNING CUSTOMER: You already know this customer's name is ${contextData.customerName}. Greet them by name and do NOT ask for their name again during the booking — use it automatically when confirming.`
+    console.log('Returning customer:', contextData.customerName)
   }
 
   // First pass
   let response = await client.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 1000,
-    system: getSystemPrompt(settings, '', existingBookingContext),
+    system: getSystemPrompt(settings, '', customerContext),
     messages,
   })
 
@@ -288,7 +293,7 @@ Greet them by name and show these details. Ask if they want to modify, cancel, o
     response = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 1000,
-      system: getSystemPrompt(settings, availabilityResult, existingBookingContext),
+      system: getSystemPrompt(settings, availabilityResult, customerContext),
       messages: messagesWithAvailability,
     })
 
