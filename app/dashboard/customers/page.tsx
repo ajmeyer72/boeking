@@ -121,12 +121,18 @@ export default function CustomersPage() {
   }
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('noshows') === 'true') {
-      setShowNoshowsOnly(true)
-    }
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('noshows') === 'true') {
+    setShowNoshowsOnly(true)
+  }
+  const searchParam = params.get('search')
+  if (searchParam) {
+    setSearch(searchParam)
+    fetchCustomers(searchParam)
+  } else {
     fetchCustomers()
-  }, [])
+  }
+}, [])
 
   useEffect(() => {
     const timer = setTimeout(() => {
