@@ -1123,7 +1123,6 @@ router.get('/customers/:id/conversations', async (req, res) => {
       `SELECT 
         c.id,
         c.state,
-        c.created_at,
         c.last_message_at,
         COUNT(m.id) as message_count
        FROM conversations c
@@ -1131,7 +1130,7 @@ router.get('/customers/:id/conversations', async (req, res) => {
        WHERE c.customer_id = $1
        AND c.restaurant_id = $2
        GROUP BY c.id
-       ORDER BY c.created_at DESC`,
+       ORDER BY c.last_message_at DESC`,
       [id, restaurantId]
     )
 
@@ -1141,25 +1140,4 @@ router.get('/customers/:id/conversations', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch conversations' })
   }
 })
-
-// GET /dashboard/conversations/:id/messages — get messages for a conversation
-router.get('/conversations/:id/messages', async (req, res) => {
-  try {
-    const { id } = req.params
-
-    const messages = await pool.query(
-      `SELECT id, direction, content, sent_at
-       FROM messages
-       WHERE conversation_id = $1
-       ORDER BY sent_at ASC`,
-      [id]
-    )
-
-    res.json({ messages: messages.rows })
-  } catch (error) {
-    console.error('Messages error:', error)
-    res.status(500).json({ error: 'Failed to fetch messages' })
-  }
-})
-
 module.exports = router

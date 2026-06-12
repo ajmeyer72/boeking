@@ -473,7 +473,7 @@ export default function CustomersPage() {
                         {getConversationBadge(conv.state)}
                         <span className="text-xs text-gray-600">{conv.message_count} messages</span>
                       </div>
-                      <div className="text-xs text-gray-500">{formatDateTime(conv.created_at)}</div>
+                      <div className="text-xs text-gray-500">{formatDateTime(conv.last_message_at)}</div>
                     </div>
                   ))}
                 </div>
