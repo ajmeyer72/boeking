@@ -1113,5 +1113,52 @@ router.get('/events/check', async (req, res) => {
   }
 })
 
+// GET /dashboard/customers/:id/conversations — get conversation history
+router.get('/customers/:id/conversations', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { id } = req.params
 
+    const conversations = await pool.query(
+      `SELECT 
+        c.id,
+        c.state,
+        c.created_at,
+        c.last_message_at,
+        COUNT(m.id) as message_count
+       FROM conversations c
+       LEFT JOIN messages m ON m.conversation_id = c.id
+       WHERE c.customer_id = $1
+       AND c.restaurant_id = $2
+       GROUP BY c.id
+       ORDER BY c.created_at DESC`,
+      [id, restaurantId]
+    )
+
+    res.json({ conversations: conversations.rows })
+  } catch (error) {
+    console.error('Conversations error:', error)
+    res.status(500).json({ error: 'Failed to fetch conversations' })
+  }
+})
+
+// GET /dashboard/conversations/:id/messages — get messages for a conversation
+router.get('/conversations/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const messages = await pool.query(
+      `SELECT id, direction, content, sent_at
+       FROM messages
+       WHERE conversation_id = $1
+       ORDER BY sent_at ASC`,
+      [id]
+    )
+
+    res.json({ messages: messages.rows })
+  } catch (error) {
+    console.error('Messages error:', error)
+    res.status(500).json({ error: 'Failed to fetch messages' })
+  }
+})
 module.exports = router
