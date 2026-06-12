@@ -114,7 +114,7 @@ export default function DashboardPage() {
   useEffect(() => { fetchData() }, [])
   useEffect(() => { if (activeTab === 'calendar') fetchCalendar(calendarMonth) }, [activeTab, calendarMonth])
   useEffect(() => { if (selectedDate) fetchDayView(selectedDate) }, [selectedDate])
-
+  
   const handleCancel = async (id: string) => {
     if (!confirm('Are you sure you want to cancel this reservation?')) return
     await fetch(`${base}/dashboard/reservations/${id}/cancel`, {
@@ -401,10 +401,12 @@ export default function DashboardPage() {
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <div className="font-medium text-sm flex items-center gap-2">
-                                      {booking.customer_name || 'Unknown'}
-                                      {booking.arrived_at && <span className="text-xs text-green-400">&#10003; Arrived</span>}
-                                      {booking.late_notification_sent_at && !booking.arrived_at && <span className="text-xs text-yellow-400">&#9888; Late</span>}
-                                    </div>
+  <Link href={`/dashboard/customers?search=${booking.whatsapp_number}`} className="hover:text-green-400 transition">
+    {booking.customer_name || 'Unknown'}
+  </Link>
+  {booking.arrived_at && <span className="text-xs text-green-400">&#10003; Arrived</span>}
+  {booking.late_notification_sent_at && !booking.arrived_at && <span className="text-xs text-yellow-400">&#9888; Late</span>}
+</div>
                                     <div className="text-gray-500 text-xs mt-0.5 flex items-center gap-2">
                                       <span>{booking.party_size} {booking.party_size === 1 ? 'guest' : 'guests'}</span>
                                       {booking.special_requests && <><span>·</span><span className="truncate max-w-[140px]">{booking.special_requests}</span></>}
@@ -510,10 +512,12 @@ export default function DashboardPage() {
                       )}
                       <td className="px-6 py-4">
                         <div className="font-medium flex items-center gap-2">
-                          {booking.customer_name || 'Unknown'}
-                          {booking.arrived_at && <span className="text-xs text-green-400">✓ Arrived</span>}
-                          {booking.late_notification_sent_at && !booking.arrived_at && <span className="text-xs text-yellow-400">&#9888; Late</span>}
-                        </div>
+  <Link href={`/dashboard/customers?search=${booking.whatsapp_number}`} className="hover:text-green-400 transition">
+    {booking.customer_name || 'Unknown'}
+  </Link>
+  {booking.arrived_at && <span className="text-xs text-green-400">✓ Arrived</span>}
+  {booking.late_notification_sent_at && !booking.arrived_at && <span className="text-xs text-yellow-400">&#9888; Late</span>}
+</div>
                         <div className="text-gray-500 text-xs mt-0.5">+{booking.whatsapp_number}</div>
                       </td>
                       <td className="px-6 py-4">
