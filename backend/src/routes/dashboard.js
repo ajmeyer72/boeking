@@ -1140,4 +1140,24 @@ router.get('/customers/:id/conversations', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch conversations' })
   }
 })
+// GET /dashboard/conversations/:id/messages
+router.get('/conversations/:id/messages', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const messages = await pool.query(
+      `SELECT id, direction, content, sent_at
+       FROM messages
+       WHERE conversation_id = $1
+       ORDER BY sent_at ASC`,
+      [id]
+    )
+
+    res.json({ messages: messages.rows })
+  } catch (error) {
+    console.error('Messages error:', error)
+    res.status(500).json({ error: 'Failed to fetch messages' })
+  }
+})
+
 module.exports = router
