@@ -365,18 +365,22 @@ router.post('/bookings', async (req, res) => {
 
     // Send booking confirmation template
     const { sendTemplate } = require('../services/metaService')
-    await sendTemplate(
-      cleanNumber,
-      'booking_confirmation',
-      [
-        customerDisplayName,
-        displayName,
-        formattedDate,
-        formattedTime,
-        party_size.toString()
-      ],
-      meta_phone_number_id
-    )
+    const partySizeText = special_requests
+  ? `${party_size} ${parseInt(party_size) === 1 ? 'guest' : 'guests'} · ${special_requests}`
+  : `${party_size} ${parseInt(party_size) === 1 ? 'guest' : 'guests'}`
+
+await sendTemplate(
+  cleanNumber,
+  'booking_confirmation',
+  [
+    customerDisplayName,
+    displayName,
+    formattedDate,
+    formattedTime,
+    partySizeText
+  ],
+  meta_phone_number_id
+)
 
     console.log(`Booking confirmation sent to ${cleanNumber}`)
 
