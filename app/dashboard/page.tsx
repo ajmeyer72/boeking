@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 interface Reservation {
@@ -45,6 +46,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'calendar'>('today')
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   const [calendarMonth, setCalendarMonth] = useState(new Date())
   const [calendarBookings, setCalendarBookings] = useState<Record<string, Reservation[]>>({})
@@ -333,8 +335,9 @@ export default function DashboardPage() {
                   const past = isPast(dateStr)
                   return (
                     <button
-                      key={day}
-                      onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+  key={day}
+  onClick={() => setSelectedDate(isSelected ? null : dateStr)}
+  onDoubleClick={() => router.push(`/dashboard/daysheet/${dateStr}`)}
                       className={`relative aspect-square flex flex-col items-center justify-center rounded-xl text-sm transition
                         ${isSelected ? 'bg-green-500 text-black' : ''}
                         ${!isSelected && todayDate ? 'border border-green-500/50 text-green-400' : ''}
@@ -344,7 +347,11 @@ export default function DashboardPage() {
                       `}
                     >
                       <span className="font-medium">{day}</span>
-                      {hasBookings && !isSelected && <span className="text-xs text-green-400 font-mono leading-none">{bookingCount}</span>}
+                      {hasBookings && !isSelected && (
+  <>
+    <span className="text-xs text-green-400 font-mono leading-none">{bookingCount}</span>
+  </>
+)}
                       {hasBookings && isSelected && <span className="text-xs text-black font-mono leading-none">{bookingCount}</span>}
                     </button>
                   )
@@ -370,7 +377,17 @@ export default function DashboardPage() {
               <div className="flex items-center justify-center h-48 text-gray-600 text-sm">Loading...</div>
             ) : (
               <div>
-                <h3 className="font-semibold text-lg mb-1">{formatDateLong(selectedDate)}</h3>
+                <div className="flex items-center justify-between mb-1">
+  <h3 className="font-semibold text-lg">
+    {formatDateLong(selectedDate)}
+  </h3>
+  <Link
+    href={`/dashboard/daysheet/${selectedDate}`}
+    className="text-xs px-3 py-1.5 rounded-lg bg-white/5 text-gray-400 hover:text-white border border-white/10 hover:border-white/20 transition no-print"
+  >
+    &#128438; Day sheet
+  </Link>
+</div>
                 <p className="text-gray-500 text-sm mb-6">
                   {dayReservations.length === 0 && dayWaitingList.length === 0
                     ? 'No bookings or waiting list entries'
