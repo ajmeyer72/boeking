@@ -460,7 +460,7 @@ export default function SettingsPage() {
                 <div key={bd.id} className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded-xl px-4 py-3">
                   <div>
                     <div className="text-sm font-medium">
-                      {new Date(bd.blocked_date + 'T12:00:00').toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      {new Date(bd.blocked_date.toString().split('T')[0] + 'T12:00:00').toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     </div>
                     {bd.reason && <div className="text-xs text-gray-500 mt-0.5">{bd.reason}</div>}
                   </div>
