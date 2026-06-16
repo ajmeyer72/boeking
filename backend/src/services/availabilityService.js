@@ -1,4 +1,4 @@
-console.log('availabilityService loaded — v4')
+console.log('availabilityService loaded — v5')
 
 const { Pool } = require('pg')
 
@@ -14,11 +14,11 @@ const toMinutes = (timeStr) => {
 }
 
 const checkAvailability = async (restaurantId, date, time, partySize) => {
-  console.log('checkAvailability v3 called for:', date, time, partySize)
+  console.log('checkAvailability v5 called for:', date, time, partySize)
 
   const settings = await pool.query(
     `SELECT max_covers_per_slot, slot_duration_mins, max_party_size,
-            min_notice_hours, booking_window_days
+            min_notice_hours, min_notice_mins, booking_window_days
      FROM restaurant_settings
      WHERE restaurant_id = $1`,
     [restaurantId]
@@ -32,11 +32,12 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
     max_covers_per_slot,
     max_party_size,
     min_notice_hours,
+    min_notice_mins,
     booking_window_days,
     slot_duration_mins
   } = settings.rows[0]
 
-  console.log('Settings loaded:', { max_covers_per_slot, slot_duration_mins, max_party_size })
+  console.log('Settings loaded:', { max_covers_per_slot, slot_duration_mins, max_party_size, min_notice_mins })
 
   // Check party size limit
   if (partySize > max_party_size) {
@@ -47,15 +48,25 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
     }
   }
 
-  // Check minimum notice
+  // Check minimum notice — use mins if set, otherwise fall back to hours
+  const noticeMs = min_notice_mins != null
+    ? min_notice_mins * 60 * 1000
+    : (min_notice_hours || 2) * 60 * 60 * 1000
+
+  const noticeDisplay = min_notice_mins != null
+    ? min_notice_mins >= 60
+      ? `${Math.floor(min_notice_mins / 60)} hour${Math.floor(min_notice_mins / 60) > 1 ? 's' : ''}`
+      : `${min_notice_mins} minutes`
+    : `${min_notice_hours || 2} hours`
+
   const requestedDateTime = new Date(`${date}T${time}`)
-  const minNoticeTime = new Date(Date.now() + min_notice_hours * 60 * 60 * 1000)
+  const minNoticeTime = new Date(Date.now() + noticeMs)
 
   if (requestedDateTime < minNoticeTime) {
     return {
       available: false,
       reason: 'too_soon',
-      message: `Sorry, we need at least ${min_notice_hours} hours notice for bookings. Please call us directly for same-day reservations.`
+      message: `Sorry, we need at least ${noticeDisplay} notice for bookings. Please call us directly for same-day reservations.`
     }
   }
 
@@ -111,7 +122,6 @@ const checkAvailability = async (restaurantId, date, time, partySize) => {
 }
 
 const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize, maxCovers, slotDuration) => {
-  // Use passed slot duration or fetch from settings
   if (!slotDuration) {
     const settings = await pool.query(
       `SELECT slot_duration_mins FROM restaurant_settings WHERE restaurant_id = $1`,
@@ -122,7 +132,6 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
 
   console.log('Using slot duration for alternatives:', slotDuration, 'minutes')
 
-  // Get all bookings for the day
   const dayBookings = await pool.query(
     `SELECT reservation_time, SUM(party_size) as booked_covers
      FROM reservations
@@ -133,7 +142,6 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     [restaurantId, date]
   )
 
-  // Build a map of booked covers per time slot
   const bookedByTime = {}
   dayBookings.rows.forEach(row => {
     bookedByTime[row.reservation_time.slice(0, 5)] = parseInt(row.booked_covers)
@@ -141,7 +149,6 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
 
   console.log('Booked slots for the day:', bookedByTime)
 
-  // Get operating hours for this day
   const dayOfWeek = new Date(date).getDay()
   const hours = await pool.query(
     `SELECT open_time, close_time FROM operating_hours
@@ -160,10 +167,8 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
 
   console.log('Operating window (minutes):', { openMins, closeMins, lastBookingMins })
 
-  // Convert requested time to minutes
   const requestedMins = toMinutes(requestedTime)
 
-  // Check if a given slot overlaps with any fully booked slot
   const isSlotAvailable = (slotMins) => {
     const slotEnd = slotMins + slotDuration
 
@@ -174,7 +179,6 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
       const bookedEnd = bookedStart + slotDuration
 
       if (slotMins < bookedEnd && slotEnd > bookedStart) {
-        console.log(`Slot ${slotMins} overlaps with booked slot at ${bookedStart}`)
         return false
       }
     }
@@ -182,28 +186,22 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
     return true
   }
 
-  // Generate slots radiating out from requested time in both directions
   const alternatives = []
   const checkedSlots = new Set()
-
-  // Generate candidate slots — go backwards and forwards from requested time
   const candidateSlots = []
 
-  // Forward slots from requested time
   let forwardMins = requestedMins + slotDuration
   while (forwardMins <= lastBookingMins) {
     candidateSlots.push({ mins: forwardMins, diff: forwardMins - requestedMins })
     forwardMins += slotDuration
   }
 
-  // Backward slots from requested time
   let backwardMins = requestedMins - slotDuration
   while (backwardMins >= openMins) {
     candidateSlots.push({ mins: backwardMins, diff: requestedMins - backwardMins })
     backwardMins -= slotDuration
   }
 
-  // Sort by closest to requested time
   candidateSlots.sort((a, b) => a.diff - b.diff)
 
   for (const { mins } of candidateSlots) {
@@ -226,21 +224,6 @@ const findAlternativeSlots = async (restaurantId, date, requestedTime, partySize
 
   console.log('Final alternatives:', alternatives)
   return alternatives
-}
-
-const generateTimeSlots = (slotDuration = 90) => {
-  const slots = []
-  let minutes = 11 * 60
-  const endMinutes = 22 * 60
-
-  while (minutes <= endMinutes) {
-    const h = Math.floor(minutes / 60)
-    const m = minutes % 60
-    slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`)
-    minutes += slotDuration
-  }
-
-  return slots
 }
 
 const checkOperatingHours = async (restaurantId, date, time) => {
@@ -315,10 +298,8 @@ const checkBlockedDate = async (restaurantId, date) => {
 
   return { blocked: false }
 }
-// Add after the checkBlockedDate function and before the module.exports
 
 const checkMonthlyLimit = async (restaurantId) => {
-  // Get restaurant plan and limit
   const restaurant = await pool.query(
     `SELECT r.plan, r.monthly_booking_limit
      FROM restaurants r
@@ -330,10 +311,8 @@ const checkMonthlyLimit = async (restaurantId) => {
 
   const { plan, monthly_booking_limit } = restaurant.rows[0]
 
-  // Growth plan has no limit
   if (plan === 'growth' || !monthly_booking_limit) return { withinLimit: true }
 
-  // Count confirmed bookings this month
   const count = await pool.query(
     `SELECT COUNT(*) as count FROM reservations
      WHERE restaurant_id = $1
@@ -358,16 +337,9 @@ const checkMonthlyLimit = async (restaurantId) => {
   }
 }
 
-// Also update the module.exports at the bottom to include checkMonthlyLimit:
-// module.exports = {
-//   checkAvailability,
-//   checkOperatingHours,
-//   checkBlockedDate,
-//   checkMonthlyLimit
-// }
-
 module.exports = {
   checkAvailability,
   checkOperatingHours,
-  checkBlockedDate
+  checkBlockedDate,
+  checkMonthlyLimit
 }

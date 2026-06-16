@@ -516,6 +516,8 @@ router.put('/settings/hours', async (req, res) => {
 // PUT /dashboard/settings/config — update booking config
 // Replace the existing PUT /dashboard/settings/config route in backend/src/routes/dashboard.js with this:
 
+// Replace the existing PUT /dashboard/settings/config route in backend/src/routes/dashboard.js with this:
+
 router.put('/settings/config', async (req, res) => {
   try {
     const restaurantId = req.user.restaurantId
@@ -524,6 +526,7 @@ router.put('/settings/config', async (req, res) => {
       max_covers_per_slot,
       max_party_size,
       min_notice_hours,
+      min_notice_mins,
       booking_window_days,
       greeting_message,
       restaurant_display_name,
@@ -545,25 +548,27 @@ router.put('/settings/config', async (req, res) => {
         max_covers_per_slot = $2,
         max_party_size = $3,
         min_notice_hours = $4,
-        booking_window_days = $5,
-        greeting_message = $6,
-        restaurant_display_name = $7,
-        bot_tone = $8,
-        reminder_1_hours = $9,
-        reminder_2_hours = $10,
-        reminder_2_enabled = $11,
-        late_grace_mins = $12,
-        late_hold_mins = $13,
-        auto_noshow_mins = $14,
-        late_notifications_enabled = $15,
-        booking_notifications_enabled = $16,
-        notification_number = $17
-       WHERE restaurant_id = $18`,
+        min_notice_mins = $5,
+        booking_window_days = $6,
+        greeting_message = $7,
+        restaurant_display_name = $8,
+        bot_tone = $9,
+        reminder_1_hours = $10,
+        reminder_2_hours = $11,
+        reminder_2_enabled = $12,
+        late_grace_mins = $13,
+        late_hold_mins = $14,
+        auto_noshow_mins = $15,
+        late_notifications_enabled = $16,
+        booking_notifications_enabled = $17,
+        notification_number = $18
+       WHERE restaurant_id = $19`,
       [
         slot_duration_mins,
         max_covers_per_slot,
         max_party_size,
-        min_notice_hours,
+        min_notice_hours || 2,
+        min_notice_mins != null ? min_notice_mins : 60,
         booking_window_days,
         greeting_message,
         restaurant_display_name,
@@ -587,6 +592,7 @@ router.put('/settings/config', async (req, res) => {
     res.status(500).json({ error: 'Failed to update settings' })
   }
 })
+
 
 
 

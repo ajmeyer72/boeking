@@ -16,7 +16,7 @@ interface Config {
   slot_duration_mins: number
   max_covers_per_slot: number
   max_party_size: number
-  min_notice_hours: number
+  min_notice_mins: number
   booking_window_days: number
   greeting_message: string
   restaurant_display_name: string
@@ -60,7 +60,7 @@ export default function SettingsPage() {
     slot_duration_mins: 90,
     max_covers_per_slot: 20,
     max_party_size: 12,
-    min_notice_hours: 2,
+    min_notice_mins: 60,
     booking_window_days: 30,
     greeting_message: '',
     restaurant_display_name: '',
@@ -120,7 +120,7 @@ export default function SettingsPage() {
           slot_duration_mins: data.settings.slot_duration_mins || 90,
           max_covers_per_slot: data.settings.max_covers_per_slot || 20,
           max_party_size: data.settings.max_party_size || 12,
-          min_notice_hours: data.settings.min_notice_hours || 2,
+          min_notice_mins: data.settings.min_notice_mins != null ? data.settings.min_notice_mins : 60,
           booking_window_days: data.settings.booking_window_days || 30,
           greeting_message: data.settings.greeting_message || '',
           restaurant_display_name: data.settings.restaurant_display_name || '',
@@ -280,14 +280,14 @@ export default function SettingsPage() {
   }
 
   const formatEventDate = (date: string) => {
-  const clean = date.toString().split('T')[0]
-  return new Date(clean + 'T12:00:00').toLocaleDateString('en-ZA', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  })
-}
+    const clean = date.toString().split('T')[0]
+    return new Date(clean + 'T12:00:00').toLocaleDateString('en-ZA', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    })
+  }
 
   const timeOptions: string[] = []
   for (let h = 7; h <= 24; h++) {
@@ -402,9 +402,15 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Minimum notice (hours)</label>
-                <input type="number" value={config.min_notice_hours} onChange={e => setConfig({ ...config, min_notice_hours: parseInt(e.target.value) })} min={0} className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition" />
-                <p className="text-gray-600 text-xs mt-1">How far in advance bookings must be made</p>
+                <label className="block text-sm text-gray-400 mb-2">Minimum notice (minutes)</label>
+                <input
+                  type="number"
+                  value={config.min_notice_mins}
+                  onChange={e => setConfig({ ...config, min_notice_mins: parseInt(e.target.value) })}
+                  min={0}
+                  className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-green-500/50 transition"
+                />
+                <p className="text-gray-600 text-xs mt-1">e.g. 15 for same-day bookings, 120 for 2 hours notice</p>
               </div>
               <div>
                 <label className="block text-sm text-gray-400 mb-2">Booking window (days)</label>
@@ -619,52 +625,29 @@ export default function SettingsPage() {
             Add special events like jazz nights or theme dinners. Customers will be informed of the event and cover charge when booking for that time.
           </p>
 
-          {/* Add event form */}
           {showAddEvent && (
             <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5 mb-6">
               <h3 className="text-sm font-medium text-gray-300 mb-4">New special event</h3>
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Event name <span className="text-red-400">*</span></label>
-                  <input
-                    type="text"
-                    value={newEvent.event_name}
-                    onChange={e => setNewEvent({ ...newEvent, event_name: e.target.value })}
-                    placeholder="e.g. Jazz Evening with The Blue Notes"
-                    className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
-                  />
+                  <input type="text" value={newEvent.event_name} onChange={e => setNewEvent({ ...newEvent, event_name: e.target.value })} placeholder="e.g. Jazz Evening with The Blue Notes" className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Date <span className="text-red-400">*</span></label>
-                    <input
-                      type="date"
-                      value={newEvent.event_date}
-                      onChange={e => setNewEvent({ ...newEvent, event_date: e.target.value })}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500/50 transition"
-                    />
+                    <input type="date" value={newEvent.event_date} onChange={e => setNewEvent({ ...newEvent, event_date: e.target.value })} min={new Date().toISOString().split('T')[0]} className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-green-500/50 transition" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Start time <span className="text-red-400">*</span></label>
-                    <select
-                      value={newEvent.start_time}
-                      onChange={e => setNewEvent({ ...newEvent, start_time: e.target.value })}
-                      style={{ backgroundColor: '#0B0F14', color: 'white' }}
-                      className="w-full border border-white/10 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-500/50"
-                    >
+                    <select value={newEvent.start_time} onChange={e => setNewEvent({ ...newEvent, start_time: e.target.value })} style={{ backgroundColor: '#0B0F14', color: 'white' }} className="w-full border border-white/10 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-500/50">
                       <option value="" style={{ backgroundColor: '#0B0F14' }}>Select</option>
                       {timeOptions.map(t => <option key={t} value={t} style={{ backgroundColor: '#0B0F14' }}>{t}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">End time <span className="text-red-400">*</span></label>
-                    <select
-                      value={newEvent.end_time}
-                      onChange={e => setNewEvent({ ...newEvent, end_time: e.target.value })}
-                      style={{ backgroundColor: '#0B0F14', color: 'white' }}
-                      className="w-full border border-white/10 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-500/50"
-                    >
+                    <select value={newEvent.end_time} onChange={e => setNewEvent({ ...newEvent, end_time: e.target.value })} style={{ backgroundColor: '#0B0F14', color: 'white' }} className="w-full border border-white/10 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-green-500/50">
                       <option value="" style={{ backgroundColor: '#0B0F14' }}>Select</option>
                       {timeOptions.map(t => <option key={t} value={t} style={{ backgroundColor: '#0B0F14' }}>{t}</option>)}
                     </select>
@@ -672,37 +655,17 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Cover charge (R) — leave blank if no charge</label>
-                  <input
-                    type="number"
-                    value={newEvent.cover_charge}
-                    onChange={e => setNewEvent({ ...newEvent, cover_charge: e.target.value })}
-                    placeholder="e.g. 150"
-                    min={0}
-                    className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition"
-                  />
+                  <input type="number" value={newEvent.cover_charge} onChange={e => setNewEvent({ ...newEvent, cover_charge: e.target.value })} placeholder="e.g. 150" min={0} className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition" />
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Description (optional)</label>
-                  <textarea
-                    value={newEvent.description}
-                    onChange={e => setNewEvent({ ...newEvent, description: e.target.value })}
-                    rows={2}
-                    placeholder="e.g. Live jazz from 19:00 to 22:00. Smart casual dress code."
-                    className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition resize-none"
-                  />
+                  <textarea value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} rows={2} placeholder="e.g. Live jazz from 19:00 to 22:00. Smart casual dress code." className="w-full bg-[#0B0F14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-green-500/50 transition resize-none" />
                 </div>
                 <div className="flex gap-2 pt-1">
-                  <button
-                    onClick={addEvent}
-                    disabled={saving === 'events'}
-                    className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-lg text-sm transition"
-                  >
+                  <button onClick={addEvent} disabled={saving === 'events'} className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-lg text-sm transition">
                     {saving === 'events' ? 'Adding...' : 'Add event'}
                   </button>
-                  <button
-                    onClick={() => setShowAddEvent(false)}
-                    className="text-sm text-gray-500 hover:text-white px-4 py-2 rounded-lg transition"
-                  >
+                  <button onClick={() => setShowAddEvent(false)} className="text-sm text-gray-500 hover:text-white px-4 py-2 rounded-lg transition">
                     Cancel
                   </button>
                 </div>
@@ -710,11 +673,8 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Events list */}
           {specialEvents.length === 0 ? (
-            <div className="text-center py-10 text-gray-600 text-sm">
-              No special events scheduled
-            </div>
+            <div className="text-center py-10 text-gray-600 text-sm">No special events scheduled</div>
           ) : (
             <div className="space-y-3">
               {specialEvents.map(event => (
@@ -728,20 +688,11 @@ export default function SettingsPage() {
                         </span>
                       )}
                     </div>
-                    <div className="text-sm text-gray-400">
-                      {formatEventDate(event.event_date)}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {event.start_time.slice(0, 5)} — {event.end_time.slice(0, 5)}
-                    </div>
-                    {event.description && (
-                      <div className="text-xs text-gray-600 mt-1">{event.description}</div>
-                    )}
+                    <div className="text-sm text-gray-400">{formatEventDate(event.event_date)}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{event.start_time.slice(0, 5)} — {event.end_time.slice(0, 5)}</div>
+                    {event.description && <div className="text-xs text-gray-600 mt-1">{event.description}</div>}
                   </div>
-                  <button
-                    onClick={() => deleteEvent(event.id)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition flex-shrink-0 ml-4"
-                  >
+                  <button onClick={() => deleteEvent(event.id)} className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition flex-shrink-0 ml-4">
                     Delete
                   </button>
                 </div>
