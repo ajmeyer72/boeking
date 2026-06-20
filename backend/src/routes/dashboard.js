@@ -1169,5 +1169,116 @@ router.get('/conversations/:id/messages', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch messages' })
   }
 })
+// Add this route to backend/src/routes/dashboard.js before the module.exports line
+
+// POST /dashboard/walkins — add a walk-in customer
+router.post('/walkins', async (req, res) => {
+  try {
+    const restaurantId = req.user.restaurantId
+    const { customer_name, whatsapp_number, party_size } = req.body
+
+    if (!party_size) {
+      return res.status(400).json({ error: 'Party size is required' })
+    }
+
+    // Get current SA time for reservation time
+    const now = new Date()
+    const saTime = now.toLocaleTimeString('en-ZA', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Africa/Johannesburg'
+    })
+    const saDate = now.toLocaleDateString('en-ZA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: 'Africa/Johannesburg'
+    }).split('/').reverse().join('-')
+
+    let customerId = null
+    let cleanNumber = null
+
+    // Only create customer record if we have a number
+    if (whatsapp_number) {
+      cleanNumber = whatsapp_number.replace(/[\s\-\+]/g, '')
+      if (cleanNumber.startsWith('0')) {
+        cleanNumber = '27' + cleanNumber.slice(1)
+      }
+
+      // Find or create customer
+      let customer = await pool.query(
+        `SELECT * FROM customers WHERE whatsapp_number = $1 AND restaurant_id = $2`,
+        [cleanNumber, restaurantId]
+      )
+
+      if (customer.rows.length === 0) {
+        customer = await pool.query(
+          `INSERT INTO customers (restaurant_id, whatsapp_number, name)
+           VALUES ($1, $2, $3)
+           RETURNING *`,
+          [restaurantId, cleanNumber, customer_name || null]
+        )
+      } else if (customer_name && !customer.rows[0].name) {
+        await pool.query(
+          `UPDATE customers SET name = $1 WHERE id = $2`,
+          [customer_name, customer.rows[0].id]
+        )
+      }
+
+      customerId = customer.rows[0].id
+
+      await pool.query(
+        `UPDATE customers SET total_bookings = total_bookings + 1 WHERE id = $1`,
+        [customerId]
+      )
+    }
+
+    // Create reservation as confirmed walk-in with arrived_at set to now
+    const reservation = await pool.query(
+      `INSERT INTO reservations
+       (restaurant_id, customer_id, reservation_date, reservation_time,
+        party_size, status, arrived_at, special_requests)
+       VALUES ($1, $2, $3, $4, $5, 'confirmed', NOW(), 'Walk-in')
+       RETURNING *`,
+      [restaurantId, customerId, saDate, saTime, parseInt(party_size)]
+    )
+
+    // Send welcome WhatsApp if number provided
+    if (cleanNumber) {
+      const restaurant = await pool.query(
+        `SELECT r.meta_phone_number_id, rs.restaurant_display_name, r.name
+         FROM restaurants r
+         JOIN restaurant_settings rs ON rs.restaurant_id = r.id
+         WHERE r.id = $1`,
+        [restaurantId]
+      )
+
+      const { meta_phone_number_id, restaurant_display_name, name: restaurantName } = restaurant.rows[0]
+      const displayName = restaurant_display_name || restaurantName
+      const guestName = customer_name || 'there'
+
+      try {
+        const { sendTemplate } = require('../services/metaService')
+        await sendTemplate(
+          cleanNumber,
+          'walkin_welcome',
+          [guestName, displayName],
+          meta_phone_number_id
+        )
+        console.log(`Walk-in welcome sent to ${cleanNumber}`)
+      } catch (err) {
+        // Don't fail the walk-in if the WhatsApp send fails
+        console.error('Walk-in welcome message failed:', err)
+      }
+    }
+
+    res.json({ reservation: reservation.rows[0], success: true })
+  } catch (error) {
+    console.error('Walk-in error:', error)
+    res.status(500).json({ error: 'Failed to add walk-in' })
+  }
+})
+
 
 module.exports = router

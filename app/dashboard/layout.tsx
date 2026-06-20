@@ -22,6 +22,15 @@ export default function DashboardLayout({
   const [waSuccess, setWaSuccess] = useState('')
   const [waError, setWaError] = useState('')
 
+  // Walk-in modal state
+  const [showWalkin, setShowWalkin] = useState(false)
+  const [walkinName, setWalkinName] = useState('')
+  const [walkinNumber, setWalkinNumber] = useState('')
+  const [walkinParty, setWalkinParty] = useState('')
+  const [walkinSending, setWalkinSending] = useState(false)
+  const [walkinSuccess, setWalkinSuccess] = useState('')
+  const [walkinError, setWalkinError] = useState('')
+
   // Upgrade modal state
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [upgradeFeature, setUpgradeFeature] = useState('')
@@ -105,6 +114,52 @@ export default function DashboardLayout({
     }
   }
 
+  const handleWalkin = async () => {
+    if (!walkinParty) return
+    setWalkinSending(true)
+    setWalkinError('')
+    setWalkinSuccess('')
+
+    try {
+      const token = localStorage.getItem('boeking_token')
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/dashboard/walkins`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          customer_name: walkinName,
+          whatsapp_number: walkinNumber,
+          party_size: walkinParty
+        })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setWalkinError(data.error || 'Failed to add walk-in')
+        return
+      }
+
+      setWalkinSuccess(walkinNumber
+        ? 'Walk-in added and welcome message sent!'
+        : 'Walk-in added and slot blocked!'
+      )
+      setWalkinName('')
+      setWalkinNumber('')
+      setWalkinParty('')
+      setTimeout(() => {
+        setWalkinSuccess('')
+        setShowWalkin(false)
+      }, 2500)
+    } catch {
+      setWalkinError('Something went wrong. Please try again.')
+    } finally {
+      setWalkinSending(false)
+    }
+  }
+
   const requireGrowth = (featureName: string, action: () => void) => {
     if (plan === 'starter') {
       setUpgradeFeature(featureName)
@@ -159,6 +214,18 @@ export default function DashboardLayout({
                 <span className="text-gray-600">·</span>
               </>
             )}
+
+            {/* Walk-in button — available to all plans */}
+            <button
+              onClick={() => setShowWalkin(true)}
+              className="text-sm px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 transition flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+              Walk-in
+            </button>
+            <span className="text-gray-600">·</span>
 
             {isGrowth ? (
               <Link href="/dashboard/waitinglist" className="text-sm text-gray-500 hover:text-white transition">
@@ -253,6 +320,109 @@ export default function DashboardLayout({
                   {waSending ? 'Sending...' : 'Send invitation'}
                 </button>
                 <button onClick={() => setShowWhatsApp(false)} className="px-4 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:border-white/20 transition">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Walk-in Modal */}
+      {showWalkin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowWalkin(false)} />
+          <div className="relative bg-[#111827] border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-semibold">Add Walk-in</h2>
+                <p className="text-gray-500 text-sm mt-0.5">Record a walk-in and block the slot</p>
+              </div>
+              <button onClick={() => setShowWalkin(false)} className="text-gray-600 hover:text-white transition text-xl leading-none">x</button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Party size <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={walkinParty}
+                  onChange={e => setWalkinParty(e.target.value)}
+                  placeholder="e.g. 4"
+                  min={1}
+                  className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition"
+                />
+              </div>
+
+              <div className="border-t border-white/5 pt-4">
+                <p className="text-xs text-gray-500 mb-3">Optional — enter customer details to build your database and send a welcome message</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Customer name</label>
+                    <input
+                      type="text"
+                      value={walkinName}
+                      onChange={e => setWalkinName(e.target.value)}
+                      placeholder="e.g. Sarah"
+                      className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">WhatsApp number</label>
+                    <input
+                      type="text"
+                      value={walkinNumber}
+                      onChange={e => {
+                        let num = e.target.value.replace(/[\s\-\+]/g, '')
+                        if (num.startsWith('0')) num = '27' + num.slice(1)
+                        setWalkinNumber(num)
+                      }}
+                      placeholder="e.g. 27821234567"
+                      className="w-full bg-[#0B0F14] border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500/50 transition"
+                    />
+                    <p className="text-gray-600 text-xs mt-1">If entered, a welcome WhatsApp will be sent automatically</p>
+                  </div>
+                </div>
+              </div>
+
+              {walkinNumber && (
+                <div className="bg-blue-500/[0.05] border border-blue-500/20 rounded-xl px-4 py-3">
+                  <p className="text-xs text-blue-400/80 font-medium mb-1">Welcome message that will be sent:</p>
+                  <p className="text-xs text-gray-400 italic">
+                    "Hi {walkinName || 'there'}! Welcome to {user?.restaurantName}. We're so glad you're here today. We've added you to our guest list — next time you'd like a table, just message us here and our booking assistant will take care of everything instantly!"
+                  </p>
+                </div>
+              )}
+
+              {walkinSuccess && (
+                <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-green-400 text-sm">
+                  &#10003; {walkinSuccess}
+                </div>
+              )}
+
+              {walkinError && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">
+                  {walkinError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleWalkin}
+                  disabled={walkinSending || !walkinParty}
+                  className="flex-1 bg-blue-500 hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                  {walkinSending ? 'Adding...' : 'Add walk-in'}
+                </button>
+                <button
+                  onClick={() => setShowWalkin(false)}
+                  className="px-4 py-3 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:border-white/20 transition"
+                >
                   Cancel
                 </button>
               </div>
