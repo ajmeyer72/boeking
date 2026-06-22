@@ -1189,12 +1189,9 @@ router.post('/walkins', async (req, res) => {
       hour12: false,
       timeZone: 'Africa/Johannesburg'
     })
-    const saDate = now.toLocaleDateString('en-ZA', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      timeZone: 'Africa/Johannesburg'
-    }).split('/').reverse().join('-')
+    const saDate = now.toLocaleDateString('en-CA', {
+  timeZone: 'Africa/Johannesburg'
+})
 
     let customerId = null
     let cleanNumber = null
